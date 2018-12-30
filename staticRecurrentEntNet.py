@@ -264,3 +264,8 @@ class StaticRecurrentEntNet(tf.keras.Model):
                 current_sents = tf.gather(second_prgrph, current_sents_indices)[:, i, :, :]
                 encoded_sents = self.sent_encoder_module(current_sents)
                 self.update_entity_module(encoded_sents, current_sents_indices)
+
+
+# if __name__=='__main__':
+#     embedding
+#     print('hi!')
