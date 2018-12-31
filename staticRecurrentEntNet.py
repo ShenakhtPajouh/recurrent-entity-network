@@ -54,9 +54,9 @@ class Update_entity(tf.keras.Model):
     def trainable_weights(self):
         return self._trainable_weights
 
-    def initialize_hidden(self, batch_size):
-        self.batch_size=batch_size
-        self.hiddens = tf.zeros([batch_size, self.entity_num, self.entity_embedding_dim], tf.float32)
+    def initialize_hidden(self, hiddens):
+        self.batch_size=hiddens.shape[0]
+        self.hiddens = hiddens
 
     def assign_keys(self, entity_keys):
         self.keys = entity_keys
@@ -72,15 +72,18 @@ class Update_entity(tf.keras.Model):
 
             output: gates of shape : [curr_prgrphs_num, entity_num]
         '''
-        expanded=tf.expand_dims(encoded_sents,axis=1)
+        # expanded=tf.expand_dims(encoded_sents,axis=1)
         # print('expanded shape:', expanded.shape)
         # print('tile shape:', tf.tile(tf.expand_dims(encoded_sents,axis=1),[1,self.entity_num,1]).shape)
         # print('curent hiddens shape:', current_hiddens.shape)
         #
         # print(tf.reduce_sum(tf.multiply(tf.tile(tf.expand_dims(encoded_sents,axis=1),[1,self.entity_num,1]),current_hiddens)\
         #        +tf.multiply(tf.tile(tf.expand_dims(encoded_sents,axis=1),[1,self.entity_num,1]),current_keys),axis=2).shape)
-        return tf.sigmoid(tf.reduce_sum(tf.multiply(tf.tile(tf.expand_dims(encoded_sents,axis=1),[1,self.entity_num,1]),current_hiddens)\
-               +tf.multiply(tf.tile(tf.expand_dims(encoded_sents,axis=1),[1,self.entity_num,1]),current_keys),axis=2))
+        # return tf.sigmoid(tf.reduce_sum(tf.multiply(tf.tile(tf.expand_dims(encoded_sents,axis=1),[1,self.entity_num,1]),current_hiddens)\
+        #        +tf.multiply(tf.tile(tf.expand_dims(encoded_sents,axis=1),[1,self.entity_num,1]),current_keys),axis=2))
+
+        return tf.sigmoid(tf.reduce_sum(tf.multiply(tf.expand_dims(encoded_sents,1),current_hiddens)+
+                                        tf.multiply(tf.expand_dims(encoded_sents,1),current_keys),axis=2))
 
     def update_hidden(self, gates, current_hiddens, current_keys, encoded_sents, indices):
         '''
@@ -226,7 +229,7 @@ class StaticRecurrentEntNet(tf.keras.Model):
 
 
 
-    def calculate_hidden(self, curr_sents_prev_hiddens, entities):
+    def calculate_hidden(self, curr_sents_prev_hiddens, entities,mask):
         '''
         Description:
             calculates current hidden state that should be fed to lstm for predicting the next word, with attention on previous hidden states, THEN entities
@@ -246,7 +249,7 @@ class StaticRecurrentEntNet(tf.keras.Model):
         print('last hidden shape:',curr_sents_prev_hiddens[:, curr_sents_prev_hiddens.shape[1] - 1, :].shape)
         attn_hiddens_output = self.attention_hiddens(
             curr_sents_prev_hiddens[:, curr_sents_prev_hiddens.shape[1] - 1, :],
-            curr_sents_prev_hiddens[:, :curr_sents_prev_hiddens.shape[1], :])
+            curr_sents_prev_hiddens[:, :curr_sents_prev_hiddens.shape[1], :],mask)
         attn_entities_output = self.attention_entites(attn_hiddens_output, entities)
         return self.entity_dense(attn_entities_output)
 
@@ -268,97 +271,155 @@ class StaticRecurrentEntNet(tf.keras.Model):
     #     embedding_dim=self.embedding_matrix.shape[1]
     #     self.embedding_matrix=tf.concat([self.embedding_matrix,tf.zeros([1,embedding_dim])],axis=0)
 
-    def get_embeddings(self, first_prgrph, second_prgrph):
-        return tf.nn.embedding_lookup(self.embedding_matrix, first_prgrph), tf.nn.embedding_lookup(
-            self.embedding_matrix, second_prgrph)
+    def get_embeddings(self, prgrph):
+        return tf.nn.embedding_lookup(self.embedding_matrix, prgrph)
 
-    def call(self, first_prgrph, second_prgrph, p1_mask, p2_mask, entity_keys):
+    def call(self,mode, entity_keys=None,entity_hiddens=None, prgrph=None, prgrph_mask=None):
         '''
         args:
-            inputs: first_prgrph, second_prgrph shape: [batch_size, max_sent_num, max_sent_len]
+            inputs: mode: encode, decode_train, decode_test
+                    prgrph shape : [batch_size, max_sent_num, max_sent_len]
                     * I assume that fake words have index equal to embedding_matrix.shape[0]
                     entity_keys : initialized entity keys of shape : [batch_size, entity_num, entity_embedding_dim] , entity_embedding_dim=embedding_dim for now
-                    p1_mask : mask for first_prgrph, shape=[batch_size, max_sent_num, max_sent_len]
+                    prgrph_mask : mask for given prgrph, shape=[batch_size, max_sent_num, max_sent_len]
         '''
 
-        batch_size = first_prgrph.shape[0]
-        max_sent_num = first_prgrph.shape[1]
-        max_sent_len = first_prgrph.shape[2]
 
-        first_prgrph_embeddings, second_prgrph_embeddings = self.get_embeddings(first_prgrph, second_prgrph)
-        print('first_prgrph_embedding shape:',first_prgrph_embeddings.shape)
-        'first_prgrph_embeddings and second_prgrph_embeddings shape: [batch_size, max_sent_num, max_sent_len, embedding_dim]'
+        if mode=='encode':
 
-        '''
-        TASK 1 : encoding first_prgrph to update entities
-        '''
+            '''
+            TASK 1 
+            ENCODING given paragraph
+            '''
 
-        self.update_entity_module.initialize_hidden(batch_size)
-        self.update_entity_module.assign_keys(entity_keys)
+            ''' 
+            inputs: entity_keys, prgrph, prgrph_mask
+            output: entity_hiddens last state
+            '''
 
-        for i in range(max_sent_num):
-            ''' to see which sentences are available '''
-            indices = tf.where(p1_mask[:, i, 0])
-            indices=tf.squeeze(indices,axis=0)
-            print('indices_p1_mask',indices)
+            if prgrph is None:
+                raise AttributeError('prgrph is None')
+            if prgrph_mask is None:
+                raise AttributeError('prgrph_mask is None')
+            if entity_keys is None:
+                raise AttributeError('entity_keys is None')
+
+            batch_size = prgrph.shape[0]
+            max_sent_num = prgrph.shape[1]
+
+            prgrph_embeddings = self.get_embeddings(prgrph)
             # print('first_prgrph_embedding shape:',first_prgrph_embeddings.shape)
-            # print('first_prgrph_embeddings[:,i,:,:] shape:',first_prgrph_embeddings[:,i,:,:].shape)
-            current_sents = tf.gather(first_prgrph_embeddings[:,i,:,:], indices)
-            print('current_sents_call shape:',current_sents.shape)
-            encoded_sents = self.sent_encoder_module(current_sents)
-            self.update_entity_module(encoded_sents, indices)
+            'prgrph_embeddings shape: [batch_size, max_sent_num, max_sent_len, embedding_dim]'
 
-        '''
-        TASK 2 : language model on second prgrph
-        '''
+            self.update_entity_module.initialize_hidden(tf.zeros([batch_size, self.entity_num, self.entity_embedding_dim], tf.float32))
+            self.update_entity_module.assign_keys(entity_keys)
 
-        ' stores previous hidden_states of the lstm for each prgrph '
-        hidden_states = tf.zeros([batch_size, max_sent_num * max_sent_len, self.hidden_Size])
-        with tf.GradientTape() as tape:
             for i in range(max_sent_num):
-                # print('p2_mask',p2_mask)
-                current_sents_indices = tf.where(p2_mask[:, i, 0])
-                for j in range(max_sent_len):
-                    print('current word indeX:',i * max_sent_len + j)
-                    ' indices of available paragraphs'
-                    indices = tf.where(p2_mask[:, i, j])
-                    indices=tf.squeeze(indices,axis=0)
-                    # print('indices_p2_mask:',indices)   #indices_p2_mask: tf.Tensor([[0]], shape=(1, 1), dtype=int64)
-                    if j == 0:
-                        # print('start token',self.embedding_matrix[self.start_token].shape)
-                        lstm_inputs = tf.tile(tf.expand_dims(self.embedding_matrix[self.start_token],axis=0),[batch_size,1])
-                    else:
-                        lstm_inputs = tf.squeeze(tf.gather(second_prgrph_embeddings[:, i, j - 1, :], indices))
-
-                    # print(tf.gather(second_prgrph[:, i, j], indices).shape)
-                    lstm_targets = tf.gather(second_prgrph[:, i, j], indices)
-                    if i * max_sent_len + j == 0:
-                        curr_sents_curr_hidden = tf.zeros([batch_size, self.hidden_Size], tf.float32)
-                        curr_sents_cell_state = tf.zeros([batch_size, self.hidden_Size], tf.float32)
-                    else:
-                        curr_sents_prev_hiddens = tf.gather(hidden_states[:, :i * max_sent_len + j, :], indices)
-                        curr_sents_entities = tf.gather(self.update_entity_module.hiddens, indices)
-                        curr_sents_curr_hidden = self.calculate_hidden(curr_sents_prev_hiddens, curr_sents_entities)
-                    output, next_hidden, curr_sents_cell_state = self.lstm(tf.expand_dims(lstm_inputs,axis=1), initial_state=[
-                        curr_sents_curr_hidden, curr_sents_cell_state])
-                    print('next_hidden shape:',next_hidden.shape)
-                    'output shape:[batch_size, hidden_size] here, output is equal to next_hidden'
-                    index_vector=tf.ones([indices.shape[0],1],tf.int64)*(i * max_sent_len + j)
-                    new_indices=tf.keras.layers.concatenate(inputs=[tf.expand_dims(indices,1),index_vector],axis=1)
-                    print('new_indices:',new_indices)
-                    hidden_states=hidden_states+tf.scatter_nd(new_indices, next_hidden, shape=[batch_size,hidden_states.shape[1],self.hidden_Size])
-                    # print('hidden_states:',hidden_states)
-                    output = self.decoder_dense(output)
-                    loss = self.calculate_loss(tf.squeeze(output,axis=1), lstm_targets)
-                    self.total_loss += loss
-                    # gradients = tape.gradient(loss, self.variables)
-                    # self.optimizer.apply_gradients(zip(gradients, self.variables))
-
-                current_sents = tf.gather(second_prgrph, current_sents_indices)[:, i, :, :]
+                ''' to see which sentences are available '''
+                indices = tf.where(prgrph_mask[:, i, 0])
+                indices=tf.squeeze(indices,axis=0)
+                print('indices_p1_mask',indices)
+                # print('first_prgrph_embedding shape:',first_prgrph_embeddings.shape)
+                # print('first_prgrph_embeddings[:,i,:,:] shape:',first_prgrph_embeddings[:,i,:,:].shape)
+                current_sents = tf.gather(prgrph_embeddings[:,i,:,:], indices)
+                print('current_sents_call shape:',current_sents.shape)
                 encoded_sents = self.sent_encoder_module(current_sents)
-                self.update_entity_module(encoded_sents, current_sents_indices)
-                print('updated_hiddens',self.update_entity_module.hiddens)
-        return loss
+                self.update_entity_module(encoded_sents, indices)
+
+            return self.update_entity_module.hiddens
+
+        else:
+            if mode=='decode_train':
+
+                '''
+                TASK 2 : language model on given paragraph
+                '''
+
+                ''' 
+                input: prgrph, prgrph mask, entity_hiddens last state
+                yields the output predicted of shape [batch_size, vocab_size] and actual labels by predicting each word
+                '''
+
+                if prgrph is None:
+                    raise AttributeError('prgrph is None')
+                if prgrph_mask is None:
+                    raise AttributeError('prgrph_mask is None')
+
+                batch_size = prgrph.shape[0]
+                max_sent_num = prgrph.shape[1]
+                max_sent_len = prgrph.shape[2]
+
+                prgrph_embeddings = self.get_embeddings(prgrph)
+
+                self.update_entity_module.initialize_hidden(entity_hiddens)
+
+
+                ' stores previous hidden_states of the lstm for the prgrph '
+                hidden_states = tf.zeros([batch_size, max_sent_num * max_sent_len, self.hidden_Size])
+                hiddens_mask=tf.reshape(prgrph_mask,[batch_size,-1])
+
+                for i in range(max_sent_num):
+                    # print('p2_mask',p2_mask)
+                    current_sents_indices = tf.where(prgrph_mask[:, i, 0])
+                    for j in range(max_sent_len):
+                        print('current word indeX:',i * max_sent_len + j)
+                        ' indices of available paragraphs'
+                        indices = tf.where(prgrph_mask[:, i, j])
+                        indices=tf.squeeze(indices,axis=0)
+                        # print('indices_p2_mask:',indices)   #indices_p2_mask: tf.Tensor([[0]], shape=(1, 1), dtype=int64)
+                        if j == 0:
+                            # print('start token',self.embedding_matrix[self.start_token].shape)
+                            lstm_inputs = tf.tile(tf.expand_dims(self.embedding_matrix[self.start_token],axis=0),[batch_size,1])
+                        else:
+                            lstm_inputs = tf.squeeze(tf.gather(prgrph_embeddings[:, i, j - 1, :], indices))
+
+                        # print(tf.gather(second_prgrph[:, i, j], indices).shape)
+                        lstm_targets = tf.gather(prgrph[:, i, j], indices)
+                        if i * max_sent_len + j == 0:
+                            curr_sents_curr_hidden = tf.zeros([batch_size, self.hidden_Size], tf.float32)
+                            curr_sents_cell_state = tf.zeros([batch_size, self.hidden_Size], tf.float32)
+                        else:
+                            curr_sents_prev_hiddens = tf.gather(hidden_states[:, :i * max_sent_len + j, :], indices)
+                            curr_sents_prev_hiddens_mask = tf.gather(hiddens_mask[:, :i * max_sent_len + j, :], indices)
+                            curr_sents_entities = tf.gather(self.update_entity_module.hiddens, indices)
+                            curr_sents_curr_hidden = self.calculate_hidden(curr_sents_prev_hiddens, curr_sents_entities,mask=curr_sents_prev_hiddens_mask)
+                        output, next_hidden, curr_sents_cell_state = self.lstm(tf.expand_dims(lstm_inputs,axis=1), initial_state=[
+                            curr_sents_curr_hidden, curr_sents_cell_state])
+                        print('next_hidden shape:',next_hidden.shape)
+                        'output shape:[batch_size, hidden_size] here, output is equal to next_hidden'
+                        index_vector=tf.ones([indices.shape[0],1],tf.int64)*(i * max_sent_len + j)
+                        new_indices=tf.keras.layers.concatenate(inputs=[tf.expand_dims(indices,1),index_vector],axis=1)
+                        print('new_indices:',new_indices)
+                        hidden_states=hidden_states+tf.scatter_nd(new_indices, next_hidden, shape=[batch_size,hidden_states.shape[1],self.hidden_Size])
+                        # print('hidden_states:',hidden_states)
+                        output = self.decoder_dense(output)
+                        yield output,lstm_targets
+                        # loss = self.calculate_loss(tf.squeeze(output,axis=1), lstm_targets)
+                        # self.total_loss += loss
+                        # gradients = tape.gradient(loss, self.variables)
+                        # self.optimizer.apply_gradients(zip(gradients, self.variables))
+
+                    current_sents = tf.gather(prgrph, current_sents_indices)[:, i, :, :]
+                    encoded_sents = self.sent_encoder_module(current_sents)
+                    self.update_entity_module(encoded_sents, current_sents_indices)
+                    print('updated_hiddens',self.update_entity_module.hiddens)
+
+            else:
+                if mode=='decode_test':
+
+                    ''' 
+                    TASK 3 : predicting second paragraph
+                    '''
+
+                    ''' 
+                    inputs: entity_hiddens last state
+                    yields predicted output of shape [batch_size, vocab_size] each step
+                    '''
+
+                    if entity_hiddens is None:
+                        raise AttributeError('entity_hiddens is None')
+
+
 
 
 if __name__ == '__main__':
