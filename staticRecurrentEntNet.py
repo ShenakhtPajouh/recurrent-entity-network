@@ -181,20 +181,35 @@ class StaticRecurrentEntNet(tf.keras.Model):
     def trainable_weights(self):
         return self._trainable_weights
 
-    def attention_hiddens(self, query, keys):
+    def attention_hiddens(self, query, keys, memory_mask):
         '''
         Description:
             attention on keys with given quey, value is equal to keys
 
         Args:
-            inputs: query shape: [curr_prgrphs_num, 1, hiddens_size]
+            inputs: query shape: [curr_prgrphs_num, hiddens_size]
                     keys shape: [curr_prgrphs_num, prev_hiddens_num, hidden_size]
-            output shape: [curr_prgrphs_num, 1, hidden_size]
+                    memory_mask: [curr_prgrphs_num, prev_hiddens_num]
+            output shape: [curr_prgrphs_num, hidden_size]
         '''
+        values=tf.identity(keys)
+        query_shape = tf.shape(query)
+        keys_shape = tf.shape(keys)
+        values_shape = tf.shape(values)
+        batch_size = query_shape[0]
+        seq_length = keys_shape[1]
+        query_dim = query_shape[1]
+        indices = tf.where(memory_mask)
+        queries = tf.gather(query, indices[:, 0])
+        keys = tf.boolean_mask(keys, memory_mask)
+        attention_logits = tf.reduce_sum(tf.multiply(tf.expand_dims(queries,1), keys),axis=2)
+        attention_logits = tf.scatter_nd(tf.where(memory_mask), attention_logits, [batch_size, seq_length])
+        attention_logits = tf.where(memory_mask, attention_logits, tf.fill([batch_size, seq_length], -float("Inf")))
+        attention_coefficients = tf.nn.softmax(attention_logits,axis=1)
+        attention = tf.expand_dims(attention_coefficients, -1) * values
 
-        coefs = tf.nn.softmax(tf.reduce_sum(tf.multiply(query, keys), axis=2), axis=2)
-        ''' coef shape : [curr_prgrphs_num, prev_hiddens_num, 1]'''
-        return tf.reduce_sum(tf.multiply(coefs, keys), axis=1)
+        return tf.reduce_sum(attention, 1)
+
 
     def attention_entities(self, query, entities):
         '''
@@ -202,16 +217,14 @@ class StaticRecurrentEntNet(tf.keras.Model):
             attention on entities
 
         Arges:
-            inputs: query shape: [curr_prgrphs_num, 1, hiddens_size]
+            inputs: query shape: [curr_prgrphs_num, hiddens_size]
                     entities shape: [curr_prgrphs_num, entities_num, entitiy_embedding_dim]
-            output shape: [curr_prgrphs_num, 1, hidden_size]
+            output shape: [curr_prgrphs_num, entity_embedding_dim]
         '''
-        curr_prgrph_nums = query.shape[0]
-        tiles_matrix = tf.tile(
-            tf.expand_dims(tf.matmul(tf.reshape(query, [-1, query.shpae[2]]), self.entity_attn_matrix), axis=0)
-            , [1, entities.shape[1], 1])
-        ' tiles_matrix shape: [curr_prgrphs_num, entities_num, entity_embedding_dim]'
-        return tf.reduce_sum(tf.multiply(tiles_matrix, entities), axis=1)
+
+        return tf.reduce_sum(tf.multiply(tf.expand_dims(tf.matmul(query,self.entity_attn_matrix),axis=1),entities),axis=1)
+
+
 
     def calculate_hidden(self, curr_sents_prev_hiddens, entities):
         '''
@@ -230,11 +243,12 @@ class StaticRecurrentEntNet(tf.keras.Model):
             query: last column (last hidden_state)
             key and value: prev_columns
         '''
+        print('last hidden shape:',curr_sents_prev_hiddens[:, curr_sents_prev_hiddens.shape[1] - 1, :].shape)
         attn_hiddens_output = self.attention_hiddens(
             curr_sents_prev_hiddens[:, curr_sents_prev_hiddens.shape[1] - 1, :],
             curr_sents_prev_hiddens[:, :curr_sents_prev_hiddens.shape[1], :])
         attn_entities_output = self.attention_entites(attn_hiddens_output, entities)
-        return tf.squeeze(self.entity_dense(attn_entities_output),axis=1)
+        return self.entity_dense(attn_entities_output)
 
     def calculate_loss(self, outputs, lstm_targets):
 
@@ -337,8 +351,8 @@ class StaticRecurrentEntNet(tf.keras.Model):
                     output = self.decoder_dense(output)
                     loss = self.calculate_loss(tf.squeeze(output,axis=1), lstm_targets)
                     self.total_loss += loss
-                    gradients = tape.gradient(loss, self.variables)
-                    self.optimizer.apply_gradients(zip(gradients, self.variables))
+                    # gradients = tape.gradient(loss, self.variables)
+                    # self.optimizer.apply_gradients(zip(gradients, self.variables))
 
                 current_sents = tf.gather(second_prgrph, current_sents_indices)[:, i, :, :]
                 encoded_sents = self.sent_encoder_module(current_sents)
@@ -359,5 +373,6 @@ if __name__ == '__main__':
     static_recur_entNet=StaticRecurrentEntNet(embedding_matrix=embedding,entity_num=10,entity_embedding_dim=20
                                               ,rnn_hidden_size=15,vocab_size=10,start_token=6,name='static_recur_entNet')
     static_recur_entNet(p1,p2,p1_mask,p2_mask,entity_keys)
+    tf.keras.Model().__call__()
 
     print('hi!')
