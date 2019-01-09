@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+K = tf.keras.backend
 
 
 class Sent_encoder(tf.keras.Model):
@@ -9,22 +10,19 @@ class Sent_encoder(tf.keras.Model):
         super().__init__(name=name)
 
     def call(self, sents):
-        '''
+        """
         Description:
             encode given sentences with bag of words algorithm
         Args:
             input: sents shape: [current_prgrphs_num,max_sent_len,embedding_dim]
             output: encoded sentences of shape [current_prgrphs_num,encoding_dim] , here encoding_dim is equal to embedding_dim
-        '''
-
-        ' I assume word embedding for indexes greater that sentnece length is zero vector, so it does not effect sentence encoding '
-
-        print('sents shape:', sents.shape)
+        """
+        # I assume word embedding for indexes greater that sentnece length is zero vector, so it does not effect sentence encoding '
         return tf.reduce_sum(sents, 1)
 
 
 class Update_entity(tf.keras.Model):
-    def __init__(self, entity_num, entity_embedding_dim, activation=tf.nn.relu, name=None):
+    def __init__(self, entity_num, entity_embedding_dim, activation=tf.nn.relu, initializer=None, name=None):
         if name is None:
             name = 'update_entity'
 
@@ -32,27 +30,24 @@ class Update_entity(tf.keras.Model):
         self.entity_num = entity_num
         self.entity_embedding_dim = entity_embedding_dim
         self.activation = activation
-        # self._variables = []
-        self._trainable_weights=[]
-        ' defining Variables '
-        self.U = self.add_weight(shape=[self.entity_embedding_dim, self.entity_embedding_dim],initializer='normal',
-                                                  name='entityVariable_U',trainable=True)
+        if initializer is None:
+            self.initializer = tf.keras.initializers.random_normal()
+        else:
+            self.initializer = initializer
+        # defining Variables
+        self.U = None
         # self._variables.append(self.U)
-        self.V = self.add_weight(shape=[self.entity_embedding_dim, self.entity_embedding_dim],initializer='normal',
-                                                  name='entityVariable_V',trainable=True)
+        self.V = None
         # self._variables.append(self.V)
-        self.W = self.add_weight(shape=[self.entity_embedding_dim, self.entity_embedding_dim],initializer='normal',
-                                                  name='entityVariable_W',trainable=True)
+        self.W = None
         # self._variables.append(self.W)
 
+    def build(self, input_shape):
+        shape = [self.entity_embedding_dim, self.entity_embedding_dim]
+        self.U = K.variable(self.initializer(shape), name='U')
+        self.V = K.variable(self.initializer(shape), name='V')
+        self.W = K.variable(self.initializer(shape), name='W')
 
-    @property
-    def variables(self):
-        return self.trainable_weights
-
-    @property
-    def trainable_weights(self):
-        return self._trainable_weights
 
     def initialize_hidden(self, hiddens):
         self.batch_size=hiddens.shape[0]
@@ -62,7 +57,7 @@ class Update_entity(tf.keras.Model):
         self.keys = entity_keys
 
     def get_gate(self, encoded_sents,current_hiddens,current_keys):
-        '''
+        """
         Description:
             calculate the gate g_i for all hiddens of given paragraphs
         Args:
@@ -71,7 +66,7 @@ class Update_entity(tf.keras.Model):
                     current_keys: [current_prgrphs_num, entity_num, entity_embedding_dim]
 
             output: gates of shape : [curr_prgrphs_num, entity_num]
-        '''
+        """
         # expanded=tf.expand_dims(encoded_sents,axis=1)
         # print('expanded shape:', expanded.shape)
         # print('tile shape:', tf.tile(tf.expand_dims(encoded_sents,axis=1),[1,self.entity_num,1]).shape)
@@ -82,11 +77,12 @@ class Update_entity(tf.keras.Model):
         # return tf.sigmoid(tf.reduce_sum(tf.multiply(tf.tile(tf.expand_dims(encoded_sents,axis=1),[1,self.entity_num,1]),current_hiddens)\
         #        +tf.multiply(tf.tile(tf.expand_dims(encoded_sents,axis=1),[1,self.entity_num,1]),current_keys),axis=2))
 
+        # break complex formulas to simpler to be trackable!!
         return tf.sigmoid(tf.reduce_sum(tf.multiply(tf.expand_dims(encoded_sents,1),current_hiddens)+
                                         tf.multiply(tf.expand_dims(encoded_sents,1),current_keys),axis=2))
 
     def update_hidden(self, gates, current_hiddens, current_keys, encoded_sents, indices):
-        '''
+        """
         Description:
             updates hidden_index for all prgrphs
         Args:
@@ -94,17 +90,14 @@ class Update_entity(tf.keras.Model):
                     encoded_sents of shape: [current_prgrphs_num, encoding_dim]
                     current_hiddens: [current_prgrphs_num, entity_num, entity_embedding_dim]
                     current_keys: [current_prgrphs_num, entity_num, entity_embedding_dim]
-        '''
-        print(current_hiddens.shape , self.U.shape)
-        curr_prgrphs_num=current_hiddens.shape[0]
+        """
+        curr_prgrphs_num = current_hiddens.shape[0]
         h_tilda = self.activation(tf.reshape(tf.matmul(tf.reshape(current_hiddens,[-1,self.entity_embedding_dim]),self.U)+
                                              tf.matmul(tf.reshape(current_hiddens,[-1,self.entity_embedding_dim]),self.V)+
                                              tf.matmul(tf.reshape(tf.tile(tf.expand_dims(encoded_sents,0),[1,self.entity_num,1]),
                                                                   shape=[-1,self.entity_embedding_dim]),self.W),
                                              shape=[curr_prgrphs_num,self.entity_num,self.entity_embedding_dim]))
         'h_tilda shape: [current_prgrphs_num, entity_num, entity_embedding_dim]'
-        print('h_tilda shape',h_tilda.shape)
-        print('gates shape:',gates.shape)
         # tf.multiply(gates,h_tilda)
         self.hiddens=self.hiddens+tf.scatter_nd(tf.expand_dims(indices,axis=1),tf.multiply(tf.tile(tf.expand_dims(gates,axis=2),[1,1,self.entity_embedding_dim]),h_tilda),
                                                 shape=[self.batch_size,self.entity_num,self.entity_embedding_dim])
@@ -114,17 +107,14 @@ class Update_entity(tf.keras.Model):
 
 
     def call(self, encoded_sents, indices):
-        '''
+        """
         Description:
             Updates related etities
         Args:
             inputs: encoded_sents shape : [current_prgrphs_num,encoding_dim] , here encoding_dim is equal to embedding_dim
-        '''
+        """
 
-        print('self.hiddens shape:', self.hiddens.shape)
-        print('indices:', indices)
         current_hiddens = tf.gather(self.hiddens, indices)
-        print('current_hidden_call shape:',current_hiddens.shape)
         current_keys = tf.gather(self.keys, indices)
 
         if current_hiddens.shape!=current_keys.shape:
@@ -144,8 +134,8 @@ class StaticRecurrentEntNet(tf.keras.Model):
             name = 'staticRecurrentEntNet'
         super().__init__(name=name)
         self.embedding_matrix = embedding_matrix
-        'embedding_matrix shape: [vocab_size, embedding_dim]'
-        'I assume the last row is an all zero vector for fake words with index embedding_matrix.shape[0]'
+        # embedding_matrix shape: [vocab_size, embedding_dim]
+        # I assume the last row is an all zero vector for fake words with index embedding_matrix.shape[0]
         self.embedding_dim = self.embedding_matrix.shape[1]
         # self.add_zero_vector()
         self.entity_num = entity_num
@@ -155,10 +145,9 @@ class StaticRecurrentEntNet(tf.keras.Model):
         self.start_token = start_token
         'start_token shape:[1,enbedding_dim]'
 
-        self.total_loss = 0
-        self.optimizer = tf.train.AdamOptimizer()
+        self.total_loss = 0 # ??
+        self.optimizer = tf.train.AdamOptimizer() # ??
 
-        self._trainable_weights=[]
 
         ' defining submodules '
         self.sent_encoder_module = Sent_encoder()
@@ -167,22 +156,13 @@ class StaticRecurrentEntNet(tf.keras.Model):
         self.decoder_dense = tf.keras.layers.Dense(self.vocab_size, activation='softmax')
         self.entity_dense = tf.keras.layers.Dense(self.hidden_Size)
 
-        self.entity_attn_matrix =self.add_weight(shape=[self.hidden_Size, self.embedding_dim],initializer='normal',
-                                                 name='entity_attn_matrix',trainable=True)
-
+    def build(self, input_shape):
+        self.entity_attn_matrix = K.random_normal_variable(shape=[self.hidden_Size, self.embedding_dim],
+                                                           mean=0, scale=0.05, name='entity_attn_matrix')
 
     # @property
     # def trainable(self):
     #     return self._trainable
-
-    @property
-    def variables(self):
-        return [self.trainable_weights, self.lstm.variables, self.decoder_dense.variables, self.entity_dense.variables,
-                self.update_entity_module.variables]
-
-    @property
-    def trainable_weights(self):
-        return self._trainable_weights
 
     def attention_hiddens(self, query, keys, memory_mask):
         '''
@@ -230,7 +210,7 @@ class StaticRecurrentEntNet(tf.keras.Model):
 
 
     def calculate_hidden(self, curr_sents_prev_hiddens, entities,mask):
-        '''
+        """
         Description:
             calculates current hidden state that should be fed to lstm for predicting the next word, with attention on previous hidden states, THEN entities
 
@@ -239,14 +219,13 @@ class StaticRecurrentEntNet(tf.keras.Model):
                     entities: [curr_prgrphs_num, entities_num, entity_embedding_dim]
             output shape: [curr_prgrphs_num, hidden_size]
 
-        '''
+        """
 
-        '''
+        """
         attention on hidden states:
             query: last column (last hidden_state)
             key and value: prev_columns
-        '''
-        print('last hidden shape:',curr_sents_prev_hiddens[:, curr_sents_prev_hiddens.shape[1] - 1, :].shape)
+        """
         attn_hiddens_output = self.attention_hiddens(
             curr_sents_prev_hiddens[:, curr_sents_prev_hiddens.shape[1] - 1, :],
             curr_sents_prev_hiddens[:, :curr_sents_prev_hiddens.shape[1], :],mask)
@@ -255,11 +234,11 @@ class StaticRecurrentEntNet(tf.keras.Model):
 
     def calculate_loss(self, outputs, lstm_targets):
 
-        '''
+        """
         Args:
             inputs: outputs shape : [curr_prgrphs_num, vocab_size]
                     lstm_targets shape : [urr_prgrphs_num]
-        '''
+        """
         one_hot_labels=tf.one_hot(lstm_targets,outputs.shape[1])
         print('outpus shape:',outputs.shape,outputs)
         print('one_hot_labels shape:',one_hot_labels.shape)
@@ -274,7 +253,7 @@ class StaticRecurrentEntNet(tf.keras.Model):
     def get_embeddings(self, prgrph):
         return tf.nn.embedding_lookup(self.embedding_matrix, prgrph)
 
-    def call(self,mode, entity_keys=None,entity_hiddens=None, prgrph=None, prgrph_mask=None, max_sent_num=None, max_sent_len=None,eos_ind=None):
+    def call(self, mode, entity_keys=None,entity_hiddens=None, prgrph=None, prgrph_mask=None, max_sent_num=None, max_sent_len=None,eos_ind=None):
         '''
         args:
             inputs: mode: encode, decode_train, decode_test
@@ -284,6 +263,7 @@ class StaticRecurrentEntNet(tf.keras.Model):
                     prgrph_mask : mask for given prgrph, shape=[batch_size, max_sent_num, max_sent_len]
         '''
 
+        # what is inputs?
 
         if mode=='encode':
 
