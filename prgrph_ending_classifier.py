@@ -4,22 +4,28 @@ K=tf.keras.backend
 
 
 class Prgrph_ending_classifier(tf.keras.Model):
-    def __init__(self,max_sent_num,embedding_dim,encoding_dim):
+    def __init__(self,max_sent_num,entity_embedding_dim,encoding_dim,name=None):
+        if name is None:
+            name='prgrph_encoding_classifier'
+
+        super().__init__(name)
         self.max_sent_num=max_sent_num
-        self.embedding_dim=embedding_dim
+        self.entity_embedding_dim=entity_embedding_dim
         self.encoding_dim=encoding_dim
-        p_vec=tf.range(self.max_sent_num)
-        p_vec_tiled=tf.tile(tf.expand_dims(p_vec,axis=1),[1,self.embedding_dim])
-        index_vec=tf.range(self.embedding_dim)
-        index_vec_tiled=tf.tile(tf.divide(tf.expand_dims(index_vec,axis=0),self.embedding_dim),[self.max_sent_num,1])
-        self.position_embeddings=tf.sin(tf.divide(p_vec_tiled,tf.pow(200,index_vec_tiled)))
+        p_vec=tf.range(self.max_sent_num,dtype=tf.float64)
+        p_vec_tiled=tf.tile(tf.expand_dims(p_vec,axis=1),[1,encoding_dim])
+        index_vec=tf.range(self.encoding_dim)
+        index_vec_tiled=tf.tile(tf.divide(tf.expand_dims(index_vec,axis=0),self.encoding_dim),[self.max_sent_num,1])
+        # print('pow type:',type(tf.pow(200,index_vec_tiled)[0][0]))
+        self.position_embeddings=tf.cast(tf.sin(tf.divide(p_vec_tiled,tf.pow(200.0,index_vec_tiled))),tf.float32)
+        'position_embeddings shape: [max_sent_num, encoding_dim]'
 
         self.dense=tf.layers.Dense(1)
 
         self.entity_attn_matrix=None
 
     def build(self, input_shape):
-        self.entity_attn_matrix = K.random_normal_variable(shape=[self.encoding_dim, self.embedding_dim],
+        self.entity_attn_matrix = K.random_normal_variable(shape=[self.encoding_dim, self.entity_embedding_dim],
                                                            mean=0, scale=0.05, name='entity_attn_matrix')
 
     def attention_prev_sents(self, query, keys):
@@ -67,7 +73,7 @@ class Prgrph_ending_classifier(tf.keras.Model):
             output: outputs a boolean for each prgrph, indicating whether it has ended or not
         '''
         encoded_sents,entities=inputs
-        if encoded_sents.shape[2]!=self.embedding_dim:
+        if encoded_sents.shape[2]!=self.position_embeddings.shape[1]:
             raise AttributeError('encoding dim is not equal to position embedding dim')
         curr_prgrphs_num=encoded_sents.shape[0]
         sents_num=encoded_sents.shape[1]

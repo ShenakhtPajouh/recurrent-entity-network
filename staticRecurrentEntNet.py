@@ -1,6 +1,8 @@
 import tensorflow as tf
 import numpy as np
 import prgrph_ending_classifier
+import train
+
 K = tf.keras.backend
 
 
@@ -10,8 +12,7 @@ class Sent_encoder(tf.keras.Model):
             name = 'sent_encoder'
         super().__init__(name=name)
 
-
-    def call(self,inputs):
+    def call(self, inputs):
         """
         Description:
             encode given sentences with bag of words algorithm
@@ -21,8 +22,9 @@ class Sent_encoder(tf.keras.Model):
         """
         # I assume word embedding for indexes greater that sentnece length is zero vector, so it does not effect sentence encoding '
         assert isinstance(inputs, list)
+        sents = inputs[0]
 
-        return tf.reduce_sum(inputs, 1)
+        return tf.reduce_sum(sents, 1)
 
 
 class Update_entity(tf.keras.Model):
@@ -45,25 +47,23 @@ class Update_entity(tf.keras.Model):
         # self._variables.append(self.V)
         self.W = None
         # self._variables.append(self.W)
-        self.built=False
-
+        self.built = False
 
     def build(self, input_shape):
         shape = [self.entity_embedding_dim, self.entity_embedding_dim]
         self.U = K.variable(self.initializer(shape), name='U')
         self.V = K.variable(self.initializer(shape), name='V')
         self.W = K.variable(self.initializer(shape), name='W')
-        self.built=True
-
+        self.built = True
 
     def initialize_hidden(self, hiddens):
-        self.batch_size=hiddens.shape[0]
+        self.batch_size = hiddens.shape[0]
         self.hiddens = hiddens
 
     def assign_keys(self, entity_keys):
         self.keys = entity_keys
 
-    def get_gate(self, encoded_sents,current_hiddens,current_keys):
+    def get_gate(self, encoded_sents, current_hiddens, current_keys):
         """
         Description:
             calculate the gate g_i for all hiddens of given paragraphs
@@ -85,8 +85,8 @@ class Update_entity(tf.keras.Model):
         #        +tf.multiply(tf.tile(tf.expand_dims(encoded_sents,axis=1),[1,self.entity_num,1]),current_keys),axis=2))
 
         # break complex formulas to simpler to be trackable!!
-        return tf.sigmoid(tf.reduce_sum(tf.multiply(tf.expand_dims(encoded_sents,1),current_hiddens)+
-                                        tf.multiply(tf.expand_dims(encoded_sents,1),current_keys),axis=2))
+        return tf.sigmoid(tf.reduce_sum(tf.multiply(tf.expand_dims(encoded_sents, 1), current_hiddens) +
+                                        tf.multiply(tf.expand_dims(encoded_sents, 1), current_keys), axis=2))
 
     def update_hidden(self, gates, current_hiddens, current_keys, encoded_sents, indices):
         """
@@ -99,47 +99,46 @@ class Update_entity(tf.keras.Model):
                     current_keys: [current_prgrphs_num, entity_num, entity_embedding_dim]
         """
         curr_prgrphs_num = current_hiddens.shape[0]
-        h_tilda = self.activation(tf.reshape(tf.matmul(tf.reshape(current_hiddens,[-1,self.entity_embedding_dim]),self.U)+
-                                             tf.matmul(tf.reshape(current_hiddens,[-1,self.entity_embedding_dim]),self.V)+
-                                             tf.matmul(tf.reshape(tf.tile(tf.expand_dims(encoded_sents,0),[1,self.entity_num,1]),
-                                                                  shape=[-1,self.entity_embedding_dim]),self.W),
-                                             shape=[curr_prgrphs_num,self.entity_num,self.entity_embedding_dim]))
+        h_tilda = self.activation(
+            tf.reshape(tf.matmul(tf.reshape(current_hiddens, [-1, self.entity_embedding_dim]), self.U) +
+                       tf.matmul(tf.reshape(current_hiddens, [-1, self.entity_embedding_dim]), self.V) +
+                       tf.matmul(tf.reshape(tf.tile(tf.expand_dims(encoded_sents, 0), [1, self.entity_num, 1]),
+                                            shape=[-1, self.entity_embedding_dim]), self.W),
+                       shape=[curr_prgrphs_num, self.entity_num, self.entity_embedding_dim]))
         'h_tilda shape: [current_prgrphs_num, entity_num, entity_embedding_dim]'
         # tf.multiply(gates,h_tilda)
-        self.hiddens=self.hiddens+tf.scatter_nd(tf.expand_dims(indices,axis=1),tf.multiply(tf.tile(tf.expand_dims(gates,axis=2),[1,1,self.entity_embedding_dim]),h_tilda),
-                                                shape=[self.batch_size,self.entity_num,self.entity_embedding_dim])
+        self.hiddens = self.hiddens + tf.scatter_nd(tf.expand_dims(indices, axis=1), tf.multiply(
+            tf.tile(tf.expand_dims(gates, axis=2), [1, 1, self.entity_embedding_dim]), h_tilda),
+                                                    shape=[self.batch_size, self.entity_num, self.entity_embedding_dim])
 
     def normalize(self):
         self.hiddens = tf.nn.l2_normalize(self.hiddens, axis=2)
 
-
-    def call(self, inputs,training=None):
+    def call(self, inputs, training=None):
         """
         Description:
             Updates related etities
         Args:
             inputs: encoded_sents shape : [current_prgrphs_num,encoding_dim] , here encoding_dim is equal to embedding_dim
         """
-        assert isinstance(inputs,list)
+        assert isinstance(inputs, list)
 
-        encoded_sents,indices=inputs
+        encoded_sents, indices = inputs
         current_hiddens = tf.gather(self.hiddens, indices)
         current_keys = tf.gather(self.keys, indices)
 
-        if current_hiddens.shape!=current_keys.shape:
+        if current_hiddens.shape != current_keys.shape:
             raise AttributeError('hiddens and kes must have same shape')
 
-        gates=self.get_gate(encoded_sents,current_hiddens,current_keys)
-        self.update_hidden(gates,current_hiddens,current_keys,encoded_sents,indices)
+        gates = self.get_gate(encoded_sents, current_hiddens, current_keys)
+        self.update_hidden(gates, current_hiddens, current_keys, encoded_sents, indices)
         self.normalize()
         return self.hiddens
 
 
-
-
 class StaticRecurrentEntNet(tf.keras.Model):
     def __init__(self, embedding_matrix, entity_num, entity_embedding_dim, rnn_hidden_size, vocab_size, start_token,
-                 max_sent_num,name=None):
+                 max_sent_num, name=None):
 
         if name is None:
             name = 'staticRecurrentEntNet'
@@ -154,17 +153,16 @@ class StaticRecurrentEntNet(tf.keras.Model):
         self.hidden_Size = rnn_hidden_size
         self.vocab_size = vocab_size
         self.start_token = start_token
-        self.max_sent_num=max_sent_num
+        self.max_sent_num = max_sent_num
         'start_token shape:[1,enbedding_dim]'
-
-        self.total_loss = 0 # ??
-        self.optimizer = tf.train.AdamOptimizer() # ??
-
 
         ' defining submodules '
         self.sent_encoder_module = Sent_encoder()
         self.update_entity_module = Update_entity(self.entity_num, self.entity_embedding_dim)
-        self.prgrph_ending_classifier = prgrph_ending_classifier.Prgrph_ending_classifier(self.max_sent_num,self.embedding_dim)
+        self.prgrph_ending_classifier = prgrph_ending_classifier.Prgrph_ending_classifier(
+            max_sent_num=self.max_sent_num,
+            encoding_dim=self.embedding_dim,
+            entity_embedding_dim=entity_embedding_dim)
         self.lstm = tf.keras.layers.LSTM(self.hidden_Size, return_state=True)
         self.decoder_dense = tf.keras.layers.Dense(self.vocab_size, activation='softmax')
         self.entity_dense = tf.keras.layers.Dense(self.hidden_Size)
@@ -188,7 +186,11 @@ class StaticRecurrentEntNet(tf.keras.Model):
                     memory_mask: [curr_prgrphs_num, prev_hiddens_num]
             output shape: [curr_prgrphs_num, hidden_size]
         '''
-        values=tf.identity(keys)
+        print('in attention_hiddens')
+        print('keys shape:',keys.shape)
+        print('query shape:',query.shape)
+        print('mask shape',memory_mask.shape)
+        values = tf.identity(keys)
         query_shape = tf.shape(query)
         keys_shape = tf.shape(keys)
         values_shape = tf.shape(values)
@@ -198,14 +200,17 @@ class StaticRecurrentEntNet(tf.keras.Model):
         indices = tf.where(memory_mask)
         queries = tf.gather(query, indices[:, 0])
         keys = tf.boolean_mask(keys, memory_mask)
-        attention_logits = tf.reduce_sum(tf.multiply(tf.expand_dims(queries,1), keys),axis=2)
+        attention_logits = tf.reduce_sum(tf.multiply(queries, keys), axis=-1)
+        # print('attention logits:',attention_logits)
+        # print('tf.where(memory_mask):',tf.where(memory_mask))
         attention_logits = tf.scatter_nd(tf.where(memory_mask), attention_logits, [batch_size, seq_length])
         attention_logits = tf.where(memory_mask, attention_logits, tf.fill([batch_size, seq_length], -float("Inf")))
-        attention_coefficients = tf.nn.softmax(attention_logits,axis=1)
+        attention_coefficients = tf.nn.softmax(attention_logits, axis=1)
         attention = tf.expand_dims(attention_coefficients, -1) * values
 
-        return tf.reduce_sum(attention, 1)
+        # print(tf.reduce_sum(attention,1))
 
+        return tf.reduce_sum(attention, 1)
 
     def attention_entities(self, query, entities):
         '''
@@ -218,11 +223,10 @@ class StaticRecurrentEntNet(tf.keras.Model):
             output shape: [curr_prgrphs_num, entity_embedding_dim]
         '''
 
-        return tf.reduce_sum(tf.multiply(tf.expand_dims(tf.matmul(query,self.entity_attn_matrix),axis=1),entities),axis=1)
+        return tf.reduce_sum(tf.multiply(tf.expand_dims(tf.matmul(query, self.entity_attn_matrix), axis=1), entities),
+                             axis=1)
 
-
-
-    def calculate_hidden(self, curr_sents_prev_hiddens, entities,mask):
+    def calculate_hidden(self, curr_sents_prev_hiddens, entities, mask):
         """
         Description:
             calculates current hidden state that should be fed to lstm for predicting the next word, with attention on previous hidden states, THEN entities
@@ -242,23 +246,9 @@ class StaticRecurrentEntNet(tf.keras.Model):
         """
         attn_hiddens_output = self.attention_hiddens(
             curr_sents_prev_hiddens[:, curr_sents_prev_hiddens.shape[1] - 1, :],
-            curr_sents_prev_hiddens[:, :curr_sents_prev_hiddens.shape[1], :],mask)
-        attn_entities_output = self.attention_entites(attn_hiddens_output, entities)
+            curr_sents_prev_hiddens[:, :curr_sents_prev_hiddens.shape[1], :], mask)
+        attn_entities_output = self.attention_entities(attn_hiddens_output, entities)
         return self.entity_dense(attn_entities_output)
-
-    def calculate_loss(self, outputs, lstm_targets):
-
-        """
-        Args:
-            inputs: outputs shape : [curr_prgrphs_num, vocab_size]
-                    lstm_targets shape : [urr_prgrphs_num]
-        """
-        one_hot_labels=tf.one_hot(lstm_targets,outputs.shape[1])
-        print('outpus shape:',outputs.shape,outputs)
-        print('one_hot_labels shape:',one_hot_labels.shape)
-        loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=one_hot_labels, logits=outputs)
-        print('loss',loss)
-        return tf.reduce_mean(loss)
 
     # def add_zero_vector(self):
     #     embedding_dim=self.embedding_matrix.shape[1]
@@ -267,7 +257,7 @@ class StaticRecurrentEntNet(tf.keras.Model):
     def get_embeddings(self, input):
         return tf.nn.embedding_lookup(self.embedding_matrix, input)
 
-    def encode_prgrph(self,inputs):
+    def encode_prgrph(self, inputs):
         '''
             TASK 1
             ENCODING given paragraph
@@ -286,7 +276,7 @@ class StaticRecurrentEntNet(tf.keras.Model):
         #     raise AttributeError('entity_keys is None')
         if len(inputs) != 3:
             raise AttributeError('expected 3 inputs but', len(inputs), 'were given')
-        mode, entity_keys, prgrph, prgrph_mask = inputs
+        entity_keys, prgrph, prgrph_mask = inputs
         batch_size = prgrph.shape[0]
         max_sent_num = prgrph.shape[1]
 
@@ -307,15 +297,15 @@ class StaticRecurrentEntNet(tf.keras.Model):
             # print('first_prgrph_embeddings[:,i,:,:] shape:',first_prgrph_embeddings[:,i,:,:].shape)
             current_sents = tf.gather(prgrph_embeddings[:, i, :, :], indices)
             print('current_sents_call shape:', current_sents.shape)
-            encoded_sents = self.sent_encoder_module(current_sents)
-            self.update_entity_module(encoded_sents, indices)
+            encoded_sents = self.sent_encoder_module([current_sents])
+            self.update_entity_module([encoded_sents, indices])
 
         return self.update_entity_module.hiddens
 
-    def decode_train(self,inputs):
+    def decode_train(self, inputs):
         '''
             TASK 2 :
-            Language model on given paragraph
+            Language model on given paragraph (second prgrph)
         '''
 
         ''' 
@@ -358,8 +348,10 @@ class StaticRecurrentEntNet(tf.keras.Model):
                     # print('start token',self.embedding_matrix[self.start_token].shape)
                     lstm_inputs = tf.tile(tf.expand_dims(self.embedding_matrix[self.start_token], axis=0),
                                           [batch_size, 1])
+                    print('lstm_first_inputs:',lstm_inputs.shape)
                 else:
-                    lstm_inputs = tf.squeeze(tf.gather(prgrph_embeddings[:, i, j - 1, :], indices))
+                    # print('prgrph_embedding_shape:',prgrph_embeddings[:, i, j - 1, :].shape)
+                    lstm_inputs = tf.gather(prgrph_embeddings[:, i, j - 1, :], indices)
 
                 # print(tf.gather(second_prgrph[:, i, j], indices).shape)
                 lstm_targets = tf.gather(prgrph[:, i, j], indices)
@@ -372,6 +364,7 @@ class StaticRecurrentEntNet(tf.keras.Model):
                     curr_sents_entities = tf.gather(self.update_entity_module.hiddens, indices)
                     curr_sents_curr_hidden = self.calculate_hidden(curr_sents_prev_hiddens, curr_sents_entities,
                                                                    mask=curr_sents_prev_hiddens_mask)
+                    print('lstm_inputs shape:',lstm_inputs.shape)
                 output, next_hidden, curr_sents_cell_state = self.lstm(tf.expand_dims(lstm_inputs, axis=1),
                                                                        initial_state=[
                                                                            curr_sents_curr_hidden,
@@ -386,18 +379,15 @@ class StaticRecurrentEntNet(tf.keras.Model):
                                                                      self.hidden_Size])
                 # print('hidden_states:',hidden_states)
                 output = self.decoder_dense(output)
+                print('ouput_shape', output.shape)
                 yield output, lstm_targets
-                # loss = self.calculate_loss(tf.squeeze(output,axis=1), lstm_targets)
-                # self.total_loss += loss
-                # gradients = tape.gradient(loss, self.variables)
-                # self.optimizer.apply_gradients(zip(gradients, self.variables))
 
             current_sents = tf.gather(prgrph, current_sents_indices)[:, i, :, :]
-            encoded_sents = self.sent_encoder_module(current_sents)
-            self.update_entity_module(encoded_sents, current_sents_indices)
+            encoded_sents = self.sent_encoder_module([current_sents])
+            self.update_entity_module([encoded_sents, current_sents_indices])
             print('updated_hiddens', self.update_entity_module.hiddens)
 
-    def decode_test(self,inputs):
+    def decode_test(self, inputs):
         '''
             TASK 3 : predicting second paragraph
         '''
@@ -508,8 +498,8 @@ class StaticRecurrentEntNet(tf.keras.Model):
             curr_prgrphs_last_hiddens = tf.gather_nd(hidden_states, ending_indices)
 
             curr_sents = self.get_embeddings(tf.gather(generated_prgrphs, indices)[:, i, :])
-            encoded_sents = self.sent_encoder_module(curr_sents)
-            self.update_entity_module(encoded_sents, indices)
+            encoded_sents = self.sent_encoder_module([curr_sents])
+            self.update_entity_module([encoded_sents, indices])
             classifier_results = self.prgrph_ending_classifier(curr_prgrphs_last_hiddens,
                                                                self.update_entity_module.hiddens)
             'classifier_results : probabilities'
@@ -518,7 +508,7 @@ class StaticRecurrentEntNet(tf.keras.Model):
             unfinished_prgrphs_indices = tf.gather(indices, not_ended_prgrphs_indices)
         return generated_prgrphs
 
-    def call(self, inputs,training=None):
+    def call(self, inputs, training=None):
         '''
         args:
             inputs: mode: encode, decode_train, decode_test
@@ -528,36 +518,43 @@ class StaticRecurrentEntNet(tf.keras.Model):
                     prgrph_mask : mask for given prgrph, shape=[batch_size, max_sent_num, max_sent_len]
         '''
 
-        assert isinstance(inputs,list)
+        print('inputs type:', type(inputs))
+        assert isinstance(inputs, list)
         # what is inputs?
-        mode=inputs[0]
-        if mode=='encode':
-            return self.encode_prgrph(inputs)
+        mode = inputs[0]
+        if mode == 'encode':
+            return self.encode_prgrph(inputs[1:])
 
         else:
-            if mode=='decode_train':
-                return self.decode_train(inputs)
+            if mode == 'decode_train':
+                return self.decode_train(inputs[1:])
 
 
             else:
-                if mode=='decode_test':
-                    return self.decode_test(inputs)
-
-
+                if mode == 'decode_test':
+                    return self.decode_test(inputs[1:])
 
 
 if __name__ == '__main__':
     tf.enable_eager_execution()
     embedding = tf.random_normal([10, 20])
-    p1 = np.asarray([[[0,1,9,9], [2,3,4,9], [1,2,3,4]]])
+    p1 = np.asarray([[[0, 1, 9, 9], [2, 3, 4, 9], [1, 2, 3, 4]]])
     print(p1.shape)
-    p1_mask=np.asarray([[[True,True,False,False],[True,True,True,False],[True,True,True,True]]])
-    p2 = np.asarray([[[3,1,5,9], [2,3,9,9], [7,2,3,5]]])
-    p2_mask = np.asarray([[[True, True, True, False], [True,True,False, False], [True,True,True,True]]])
-    entity_keys=tf.random_normal([1,10,20])
-    static_recur_entNet=StaticRecurrentEntNet(embedding_matrix=embedding,entity_num=10,entity_embedding_dim=20
-                                              ,rnn_hidden_size=15,vocab_size=10,start_token=6,name='static_recur_entNet')
-    static_recur_entNet(p1,p2,p1_mask,p2_mask,entity_keys)
-    tf.keras.Model().__call__()
+    p1_mask = np.asarray([[[True, True, False, False], [True, True, True, False], [True, True, True, True]]])
+    p2 = np.asarray([[[3, 1, 5, 9], [2, 3, 9, 9], [7, 2, 3, 5]]])
+    p2_mask = np.asarray([[[True, True, True, False], [True, True, False, False], [True, True, True, True]]])
+    entity_keys = tf.random_normal([1, 10, 20])
+    # static_recur_entNet=StaticRecurrentEntNet(embedding_matrix=embedding,entity_num=10,entity_embedding_dim=20
+    #                                           ,rnn_hidden_size=15,vocab_size=10,start_token=6,name='static_recur_entNet',max_sent_num=3)
+
+    # encode_inputs=['encode',entity_keys,p1,p1_mask]
+    # entities=static_recur_entNet(inputs=encode_inputs)
+    # print(entities)
+
+    total_loss = train.train(model_name='static_recur_entNet', embedding_matrix=embedding, entity_num=10,
+                             entity_embedding_dim=20,
+                             rnn_hidden_size=15, vocab_size=10, start_token=6, max_sent_num=3, p1=p1, p1_mask=p1_mask,
+                             p2=p2, p2_mask=p2_mask, entity_keys=entity_keys,
+                             save_path='./static_entnet_model.ckpt', learning_rate=0.01)
 
     print('hi!')
