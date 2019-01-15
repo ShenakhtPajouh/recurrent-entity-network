@@ -327,12 +327,12 @@ class StaticRecurrentEntNet(tf.keras.Model):
         #     raise AttributeError('prgrph_mask is None')
         # if entity_hiddens is None:
         #     raise AttributeError('entity_hiddens is None')
-        if len(inputs) != 4:
-            raise AttributeError('expected 4 inputs but', len(inputs), 'were given')
+        if len(inputs) != 5:
+            raise AttributeError('expected 5 inputs but', len(inputs), 'were given')
 
         print('IN DECODE_TRAIN')
 
-        entity_hiddens, prgrph, prgrph_mask, vocab_size = inputs
+        test_mode_bool, entity_hiddens, prgrph, prgrph_mask, vocab_size = inputs
         batch_size = prgrph.shape[0]
         max_sent_num = prgrph.shape[1]
         max_sent_len = prgrph.shape[2]
@@ -422,7 +422,8 @@ class StaticRecurrentEntNet(tf.keras.Model):
                     t=tf.ones([indices.shape[0]],dtype=tf.int32)
                     output_mask=output_mask+tf.scatter_nd(new_indices_output,t,shape=[batch_size,max_sent_num,max_sent_len])
 
-
+            if test_mode_bool==True:
+                return tf.zeros([1])
             # print('current_sents_indices',current_sents_indices)
             current_sents = tf.gather(prgrph_embeddings[:, i, :, :], current_sents_indices)
             print('decode_train, currents_sents shape',current_sents.shape)
