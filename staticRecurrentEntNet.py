@@ -514,21 +514,21 @@ class StaticRecurrentEntNet(tf.keras.Model):
                                                                                                curr_sents_cell_state])
 
                     'to handle the case where at least one sentence has generated <oes> as the first word!'
-                    if j == 0:
-                        count=0
-                        lstm_output1 = self.decoder_dense(lstm_output)
-                        last_output = tf.cast(tf.argmax(lstm_output1, dimension=1), tf.int32)
-                        all_eos_vector = tf.cast(tf.ones([last_output.shape[0]]) * eos_ind,tf.int32)
-                        # print('last_output-all_eos_vector',last_output-all_eos_vector)
-                        # print(np.count_nonzero(last_output - all_eos_vector),last_output.shape[0])
-                        # print(np.count_nonzero(last_output - all_eos_vector) != last_output.shape[0])
-                        while np.count_nonzero(last_output - all_eos_vector) != last_output.shape[0] and count<20:
-                            lstm_output, next_hidden, next_cell_state = self.lstm(tf.expand_dims(lstm_inputs, axis=1),
-                                                                                  initial_state=[curr_sents_curr_hidden,
-                                                                                                 curr_sents_cell_state])
-                            lstm_output1 = self.decoder_dense(lstm_output)
-                            last_output = tf.cast(tf.argmax(lstm_output1, dimension=1), tf.int32)
-                            count=count+1
+                    # if j == 0:
+                    #     count=0
+                    #     lstm_output1 = self.decoder_dense(lstm_output)
+                    #     last_output = tf.cast(tf.argmax(lstm_output1, dimension=1), tf.int32)
+                    #     all_eos_vector = tf.cast(tf.ones([last_output.shape[0]]) * eos_ind,tf.int32)
+                    #     # print('last_output-all_eos_vector',last_output-all_eos_vector)
+                    #     # print(np.count_nonzero(last_output - all_eos_vector),last_output.shape[0])
+                    #     # print(np.count_nonzero(last_output - all_eos_vector) != last_output.shape[0])
+                    #     while np.count_nonzero(last_output - all_eos_vector) != last_output.shape[0] and count<20:
+                    #         lstm_output, next_hidden, next_cell_state = self.lstm(tf.expand_dims(lstm_inputs, axis=1),
+                    #                                                               initial_state=[curr_sents_curr_hidden,
+                    #                                                                              curr_sents_cell_state])
+                    #         lstm_output1 = self.decoder_dense(lstm_output)
+                    #         last_output = tf.cast(tf.argmax(lstm_output1, dimension=1), tf.int32)
+                    #         count=count+1
 
 
                     'updating cell_states'
