@@ -481,7 +481,7 @@ class StaticRecurrentEntNet(tf.keras.Model):
         cell_states=tf.zeros([1])
 
         for i in range(self.max_sent_num):
-            indices = unfinished_prgrphs_indices
+            indices = tf.identity(unfinished_prgrphs_indices)
             if indices.shape[0]>0:
                 for j in range(max_sent_len):
                     print('current word indeX:', i,j)
@@ -499,8 +499,9 @@ class StaticRecurrentEntNet(tf.keras.Model):
                         curr_sents_curr_hidden = self.start_hidden_dense(tf.reduce_sum(entity_hiddens, axis=1))
                         cell_states = tf.zeros([batch_size, self.hidden_Size], tf.float32)
                     else:
-
+                        print('hidden_states shape:',hidden_states.shape)
                         curr_sents_prev_hiddens = tf.gather(hidden_states[:, :i * max_sent_len + j, :], indices)
+                        print('curr_sents_prev_hiddens shape:',curr_sents_prev_hiddens.shape,indices.shape)
                         curr_sents_prev_hiddens_mask = tf.gather(hiddens_mask[:, 1:], indices)
                         curr_sents_entities = tf.gather(self.update_entity_module.hiddens, indices)
                         curr_sents_curr_hidden = self.calculate_hidden(curr_sents_prev_hiddens,
@@ -511,6 +512,24 @@ class StaticRecurrentEntNet(tf.keras.Model):
                     lstm_output, next_hidden, next_cell_state = self.lstm(tf.expand_dims(lstm_inputs, axis=1),
                                                                                 initial_state=[curr_sents_curr_hidden,
                                                                                                curr_sents_cell_state])
+
+                    'to handle the case where at least one sentence has generated <oes> as the first word!'
+                    if j == 0:
+                        count=0
+                        lstm_output1 = self.decoder_dense(lstm_output)
+                        last_output = tf.cast(tf.argmax(lstm_output1, dimension=1), tf.int32)
+                        all_eos_vector = tf.cast(tf.ones([last_output.shape[0]]) * eos_ind,tf.int32)
+                        # print('last_output-all_eos_vector',last_output-all_eos_vector)
+                        # print(np.count_nonzero(last_output - all_eos_vector),last_output.shape[0])
+                        # print(np.count_nonzero(last_output - all_eos_vector) != last_output.shape[0])
+                        while np.count_nonzero(last_output - all_eos_vector) != last_output.shape[0] and count<20:
+                            lstm_output, next_hidden, next_cell_state = self.lstm(tf.expand_dims(lstm_inputs, axis=1),
+                                                                                  initial_state=[curr_sents_curr_hidden,
+                                                                                                 curr_sents_cell_state])
+                            lstm_output1 = self.decoder_dense(lstm_output)
+                            last_output = tf.cast(tf.argmax(lstm_output1, dimension=1), tf.int32)
+                            count=count+1
+
 
                     'updating cell_states'
                     curr_cells_prev_state = tf.gather(cell_states, indices)
@@ -535,7 +554,8 @@ class StaticRecurrentEntNet(tf.keras.Model):
 
                     # print('hidden_states:',hidden_states)
                     lstm_output = self.decoder_dense(lstm_output)
-                    last_output = tf.cast(tf.arg_max(lstm_output, dimension=1),tf.int32)
+                    last_output = tf.cast(tf.argmax(lstm_output, dimension=1),tf.int32)
+
                     if j == max_sent_len - 1:
                         last_output = tf.cast(tf.ones([indices.shape[0]]) * eos_ind,dtype=tf.int32)
                     'last_output is a one_dimensional vector'
@@ -582,9 +602,11 @@ class StaticRecurrentEntNet(tf.keras.Model):
                                                                    self.update_entity_module.hiddens])
                 'classifier_results : probabilities'
                 print('classifier_results',classifier_results)
-                bool_results = tf.less(classifier_results, 0.5)
-                not_ended_prgrphs_indices = tf.where(bool_results)
-                # print('unfinished_prgrph_indices',unfinished_prgrphs_indices)
+                bool_results = tf.squeeze(tf.less(classifier_results, 0.5),axis=1)
+                print('bool_results',bool_results)
+                not_ended_prgrphs_indices = tf.squeeze(tf.where(bool_results),axis=1)
+                print('unfinished_prgrph_indices',unfinished_prgrphs_indices)
+                print('not_ended_prgrphs_indices',not_ended_prgrphs_indices)
                 unfinished_prgrphs_indices = tf.gather(unfinished_prgrphs_indices, not_ended_prgrphs_indices)
                 # print('unfinished_prgrph_indices2', unfinished_prgrphs_indices)
 

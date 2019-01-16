@@ -12,6 +12,7 @@ def test(model_name, embedding_matrix, entity_num, entity_embedding_dim, rnn_hid
                                                                       , rnn_hidden_size=rnn_hidden_size,
                                                                       vocab_size=vocab_size, start_token=start_token,
                                                                       name=model_name, max_sent_num=max_sent_num)
+    max_sent_len=p1.shape[2]
     ' training the model for one step just to initialize all variables '
     encode_inputs = ['encode', entity_keys, p1, p1_mask]
     entities = static_recur_entNet(inputs=encode_inputs)
@@ -29,7 +30,7 @@ def test(model_name, embedding_matrix, entity_num, entity_embedding_dim, rnn_hid
 
     entity_hiddens=static_recur_entNet(inputs=encode_inputs)
     print(entity_hiddens)
-    decode_test_input = ['decode_test', entity_hiddens, max_sent_num, eos_ind]
+    decode_test_input = ['decode_test', entity_hiddens, max_sent_len, eos_ind]
     generated_prgrph=static_recur_entNet(decode_test_input)
     print(generated_prgrph)
 
@@ -48,9 +49,9 @@ if __name__=='__main__':
     p2_mask = np.asarray([[[True, True, True, False], [True, True, False, False], [True, True, True, True]],
                           [[True, True, True, False], [True, True, True, False], [True, True, True, False]]])
     entity_keys = tf.random_normal([2, 10, 20])
-    test(model_name='static_recur_entNet', embedding_matrix=embedding, entity_num=10,
-                             entity_embedding_dim=20,
-                             rnn_hidden_size=15, vocab_size=10, start_token=6, max_sent_num=3, p1=p1, p1_mask=p1_mask,
+    test(model_name='static_recur_entNet', embedding_matrix=embedding, entity_num=entity_keys.shape[1],
+                             entity_embedding_dim=entity_keys.shape[2],
+                             rnn_hidden_size=15, vocab_size=10, start_token=6, max_sent_num=p1.shape[1], p1=p1, p1_mask=p1_mask,
                              entity_keys=entity_keys,
                              model_path='./static_ent_net_model',eos_ind=9)
 
