@@ -57,10 +57,11 @@ def train(model_name, embedding_matrix, entity_num, entity_embedding_dim, rnn_hi
         # print('trainable_Variable:',static_recur_entNet.trainable_variables)
         # print('gradients:',gradients)
         # print('gradinets[0]',gradients[0])
+        print(static_recur_entNet.variables)
     optimizer.apply_gradients(zip(gradients, static_recur_entNet.variables),global_step=tf.train.get_or_create_global_step())
 
     'saving the model'
-    checkpoint_dir='./static_ent_net_model'
+    checkpoint_dir=save_path
     os.makedirs(checkpoint_dir,exist_ok=True)
     checkpoint_prefix=os.path.join(checkpoint_dir,'ckpt')
     # root=tf.train.Checkpoint(model=static_recur_entNet)
@@ -68,6 +69,36 @@ def train(model_name, embedding_matrix, entity_num, entity_embedding_dim, rnn_hi
     tfe.Saver(static_recur_entNet.variables).save(checkpoint_prefix)
 
     return loss
+
+
+if __name__ == '__main__':
+    tf.enable_eager_execution()
+    embedding = tf.random_normal([10, 20])
+    p1 = np.asarray([[[0, 1, 9, 9], [2, 3, 4, 9], [1, 2, 3, 4]],
+                     [[0, 1, 9, 9], [2, 3, 4, 7], [1, 2, 3, 4]]])
+    print(p1.shape)
+    p1_mask = np.asarray([[[True, True, False, False], [True, True, True, False], [True, True, True, True]],
+                          [[True, True, False, False], [True, True, True, True], [True, True, True, True]]])
+    p2 = np.asarray([[[3, 1, 5, 9], [2, 3, 9, 9], [7, 2, 3, 5]],
+                     [[3, 1, 5, 9], [2, 3, 6, 9], [7, 2, 3, 9]]])
+    p2_mask = np.asarray([[[True, True, True, False], [True, True, False, False], [True, True, True, True]],
+                          [[True, True, True, False], [True, True, True, False], [True, True, True, False]]])
+    entity_keys = tf.random_normal([2, 10, 20])
+    # static_recur_entNet=StaticRecurrentEntNet(embedding_matrix=embedding,entity_num=10,entity_embedding_dim=20
+    #                                           ,rnn_hidden_size=15,vocab_size=10,start_token=6,name='static_recur_entNet',max_sent_num=3)
+
+    # encode_inputs=['encode',entity_keys,p1,p1_mask]
+    # entities=static_recur_entNet(inputs=encode_inputs)
+    # print(entities)
+
+    total_loss = train(model_name='static_recur_entNet', embedding_matrix=embedding, entity_num=10,
+                             entity_embedding_dim=20,
+                             rnn_hidden_size=15, vocab_size=10, start_token=6, max_sent_num=3, p1=p1, p1_mask=p1_mask,
+                             p2=p2, p2_mask=p2_mask, entity_keys=entity_keys,
+                             save_path='./static_ent_net_model', learning_rate=0.01)
+
+    print('hi!')
+
 
 
 

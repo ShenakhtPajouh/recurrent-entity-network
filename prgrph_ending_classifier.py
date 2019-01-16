@@ -58,8 +58,8 @@ class Prgrph_ending_classifier(tf.keras.Model):
         return tf.reduce_sum(tf.multiply(tf.expand_dims(tf.matmul(query, self.entity_attn_matrix), axis=1), entities),axis=1)
 
     def __call__(self,inputs,*training):
-        self.build(self.inputs.shape)
-        self.call(inputs,training)
+        self.build([0])
+        return self.call(inputs,training)
 
     def call(self, inputs,training=None, mask=None):
         '''
@@ -67,18 +67,22 @@ class Prgrph_ending_classifier(tf.keras.Model):
             given hidden_states and entities determines whether last hidden_state is for the last sentence of the paragraph or not
 
         inputs:
-            inputs: encoded, shape : [curr_prgrphs_num, sents_num, encoding_dim]
+            inputs: encoded_sents, shape : [curr_prgrphs_num, sents_num, encoding_dim]
                     entities, shape : [curr_prgrphs_num, entities_num, entity_embedding_dim]
 
-            output: outputs a boolean for each prgrph, indicating whether it has ended or not
+            output: outputs a number in [0,1] for each prgrph, indicating whether it has ended or not
         '''
+
+        if len(inputs)!=2:
+            raise AttributeError('expected 2 inputs but ',len(inputs),' were given')
         encoded_sents,entities=inputs
-        if encoded_sents.shape[2]!=self.position_embeddings.shape[1]:
-            raise AttributeError('encoding dim is not equal to position embedding dim')
+        # print(encoded_sents.shape,self.position_embeddings.shape)
         curr_prgrphs_num=encoded_sents.shape[0]
         sents_num=encoded_sents.shape[1]
         encoded_sents=encoded_sents+tf.tile(tf.expand_dims(self.position_embeddings[:sents_num,:],axis=0),[curr_prgrphs_num,1,1])
         attn_hiddens_output = self.attention_prev_sents(encoded_sents[:, encoded_sents.shape[1] - 1, :],
                                                      encoded_sents[:, :encoded_sents.shape[1], :])
-        attn_entities_output = self.attention_entites(attn_hiddens_output, entities)
+        attn_entities_output = self.attention_entities(attn_hiddens_output, entities)
+        # print('attn_entities_output',attn_entities_output)
+        # print(tf.sigmoid(self.dense(attn_entities_output)))
         return tf.sigmoid(self.dense(attn_entities_output))
