@@ -104,7 +104,7 @@ class Update_entity(tf.keras.Model):
         h_tilda = self.activation(
             tf.reshape(tf.matmul(tf.reshape(current_hiddens, [-1, self.entity_embedding_dim]), self.U) +
                        tf.matmul(tf.reshape(current_hiddens, [-1, self.entity_embedding_dim]), self.V) +
-                       tf.matmul(tf.reshape(tf.tile(tf.expand_dims(encoded_sents, 0), [1, self.entity_num, 1]),
+                       tf.matmul(tf.reshape(tf.tile(tf.expand_dims(encoded_sents, 1), [1, self.entity_num, 1]),
                                             shape=[-1, self.entity_embedding_dim]), self.W),
                        shape=[curr_prgrphs_num, self.entity_num, self.entity_embedding_dim]))
         'h_tilda shape: [current_prgrphs_num, entity_num, entity_embedding_dim]'
