@@ -31,6 +31,9 @@ class EntityCell(tf.keras.layers.Layer):
     """
 
     def __init__(self, max_entity_num, entity_embedding_dim, name=None, initializer=None, **kwargs):
+        if name is None:
+            name='Entity_cell'
+        self.name=name
         self.max_entity_num = max_entity_num
         self.entity_embedding_dim = entity_embedding_dim
 
@@ -40,13 +43,6 @@ class EntityCell(tf.keras.layers.Layer):
         self.V = K.variable(self.initializer(shape), name='V')
         self.W = K.variable(self.initializer(shape), name='W')
         self.built = True
-
-    # def initialize_hidden(self, hiddens):
-    #     self.batch_size = hiddens.shape[0]
-    #     self.hiddens = hiddens
-
-    # def assign_keys(self, entity_keys):
-    #     self.keys = entity_keys
 
     def get_gate(self, encoded_sents, current_hiddens, current_keys):
         """
@@ -386,10 +382,8 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
         values = tf.identity(keys)
         query_shape = tf.shape(query)
         keys_shape = tf.shape(keys)
-        values_shape = tf.shape(values)
         batch_size = query_shape[0]
         seq_length = keys_shape[1]
-        query_dim = query_shape[1]
         indices = tf.where(memory_mask)
         queries = tf.gather(query, indices[:, 0])
         keys = tf.boolean_mask(keys, memory_mask)
@@ -419,10 +413,8 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
         values = tf.identity(entities)
         query_shape = tf.shape(query)
         entities_shape = tf.shape(entities)
-        # values_shape = tf.shape(values)
         batch_size = query_shape[0]
         seq_length = entities_shape[1]
-        # query_dim = query_shape[1]
         indices = tf.where(keys_mask)
         queries = tf.gather(query, indices[:, 0])
         entities = tf.boolean_mask(entities, keys_mask)
