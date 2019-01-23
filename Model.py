@@ -368,6 +368,100 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
         self.entity_attn_matrix = K.random_normal_variable(shape=[self.rnn_hidden_size, self.embedding_dim],
                                                            mean=0, scale=0.05, name='entity_attn_matrix')
 
+    def attention_hiddens(self, query, keys, memory_mask):
+        '''
+        Description:
+            attention on keys with given quey, value is equal to keys
+
+        Args:
+            inputs: query shape: [curr_prgrphs_num, hiddens_size]
+                    keys shape: [curr_prgrphs_num, prev_hiddens_num, hidden_size]
+                    memory_mask: [curr_prgrphs_num, prev_hiddens_num]
+            output shape: [curr_prgrphs_num, hidden_size]
+        '''
+        print('in attention_hiddens')
+        print('keys shape:', keys.shape)
+        print('query shape:', query.shape)
+        print('mask shape', memory_mask.shape)
+        values = tf.identity(keys)
+        query_shape = tf.shape(query)
+        keys_shape = tf.shape(keys)
+        values_shape = tf.shape(values)
+        batch_size = query_shape[0]
+        seq_length = keys_shape[1]
+        query_dim = query_shape[1]
+        indices = tf.where(memory_mask)
+        queries = tf.gather(query, indices[:, 0])
+        keys = tf.boolean_mask(keys, memory_mask)
+        attention_logits = tf.reduce_sum(tf.multiply(queries, keys), axis=-1)
+        # print('attention logits:',attention_logits)
+        # print('tf.where(memory_mask):',tf.where(memory_mask))
+        attention_logits = tf.scatter_nd(tf.where(memory_mask), attention_logits, [batch_size, seq_length])
+        attention_logits = tf.where(memory_mask, attention_logits, tf.fill([batch_size, seq_length], -float("Inf")))
+        attention_coefficients = tf.nn.softmax(attention_logits, axis=1)
+        attention = tf.expand_dims(attention_coefficients, -1) * values
+
+        # print(tf.reduce_sum(attention,1))
+
+        return tf.reduce_sum(attention, 1)
+
+    def attention_entities(self, query, entities, keys_mask):
+        '''
+        Description:
+            attention on entities
+
+        Arges:
+            inputs: query shape: [curr_prgrphs_num, rnn_hidden_size]
+                    entities shape: [curr_prgrphs_num, entities_num, entitiy_embedding_dim]
+            output shape: [curr_prgrphs_num, entity_embedding_dim]
+        '''
+
+        values = tf.identity(entities)
+        query_shape = tf.shape(query)
+        entities_shape = tf.shape(entities)
+        # values_shape = tf.shape(values)
+        batch_size = query_shape[0]
+        seq_length = entities_shape[1]
+        # query_dim = query_shape[1]
+        indices = tf.where(keys_mask)
+        queries = tf.gather(query, indices[:, 0])
+        entities = tf.boolean_mask(entities, keys_mask)
+        attention_logits = tf.reduce_sum(tf.multiply(tf.matmul(queries,self.entity_attn_matrix), entities), axis=-1)
+        # print('attention logits:',attention_logits)
+        # print('tf.where(memory_mask):',tf.where(memory_mask))
+        attention_logits = tf.scatter_nd(tf.where(keys_mask), attention_logits, [batch_size, seq_length])
+        attention_logits = tf.where(keys_mask, attention_logits, tf.fill([batch_size, seq_length], -float("Inf")))
+        attention_coefficients = tf.nn.softmax(attention_logits, axis=1)
+        attention = tf.expand_dims(attention_coefficients, -1) * values
+
+        return tf.reduce_sum(tf.multiply(tf.expand_dims(tf.matmul(query, self.entity_attn_matrix), axis=1), entities),
+                             axis=1)
+
+
+    def calculate_hidden(self, curr_sents_prev_hiddens, entities, hiddens_mask, keys_mask):
+        """
+        Description:
+            calculates current hidden state that should be fed to lstm for predicting the next word, with attention on previous hidden states, THEN entities
+
+        Args:
+            inputs: curr_sents_prev_hiddens shape: [curr_prgrphs_num, prev_hiddens_num, hidden_size]
+                    entities: [curr_prgrphs_num, entities_num, entity_embedding_dim]
+                    mask: [curr_prgrphs_num, prev_hiddens_num]
+            output shape: [curr_prgrphs_num, hidden_size]
+
+        """
+
+        """
+        attention on hidden states:
+            query: last column (last hidden_state)
+            key and value: prev_columns
+        """
+        attn_hiddens_output = self.attention_hiddens(
+            curr_sents_prev_hiddens[:, curr_sents_prev_hiddens.shape[1] - 1, :],
+            curr_sents_prev_hiddens[:, :curr_sents_prev_hiddens.shape[1], :], hiddens_mask)
+        attn_entities_output = self.attention_entities(attn_hiddens_output, entities, keys_mask)
+        return self.entity_dense(attn_entities_output)
+
     def get_embeddings(self, input):
         return tf.nn.embedding_lookup(self.embedding_matrix, input)
 
@@ -454,7 +548,8 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                         else:
                             prev_states = tf.gather(all_entity_hiddens[:, -1, :, :], indices)
                         curr_sents_curr_hidden = self.calculate_hidden(curr_sents_prev_hiddens, prev_states,
-                                                                       mask=curr_sents_prev_hiddens_mask)
+                                                                       mask=curr_sents_prev_hiddens_mask,
+                                                                       keys_mask=keys_mask)
                     curr_sents_cell_state = tf.gather(cell_states, indices)
                     print('lstm_inputs shape:', lstm_inputs.shape)
                     output, next_hidden, next_cell_state = self.lstm(tf.expand_dims(lstm_inputs, axis=1),
@@ -536,13 +631,6 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
         # yields predicted output of shape [batch_size, vocab_size] each step
         '''
 
-        # if entity_hiddens is None:
-        #     raise AttributeError('entity_hiddens is None')
-        # if max_sent_len is None:
-        #     raise AttributeError('max_sent_len is None')
-        # if eos_ind is None:
-        #     raise AttributeError('eos_ind is None')
-
         if len(inputs) != 4:
             raise AttributeError('expected 4 inputs but', len(inputs), 'were given')
 
@@ -588,7 +676,12 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
 
                     if i * max_sent_len + j == 0:
                         # print(tf.reduce_sum(entity_hiddens,axis=1))
-                        curr_sents_curr_hidden = self.start_hidden_dense(tf.reduce_sum(entity_hiddens, axis=1))
+
+                        if initial_hidden_state is None:
+                            curr_sents_curr_hidden = self.start_hidden_dense(
+                                tf.reduce_sum(tf.multiply(entity_hiddens,tf.cast(keys_mask,dtype=tf.int32)), axis=1))
+                        else:
+                            curr_sents_curr_hidden = initial_hidden_state
                         cell_states = tf.zeros([batch_size, self.rnn_hidden_size], tf.float32)
                     else:
                         print('hidden_states shape:', hidden_states.shape)
@@ -602,7 +695,8 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                             prev_states = tf.gather(all_entity_hiddens[:, -1, :, :], indices)
                         curr_sents_curr_hidden = self.calculate_hidden(curr_sents_prev_hiddens,
                                                                        prev_states,
-                                                                       mask=curr_sents_prev_hiddens_mask)
+                                                                       hiddens_mask=curr_sents_prev_hiddens_mask,
+                                                                       keys_mask=keys_mask)
 
                     curr_sents_cell_state = tf.gather(cell_states, indices)
                     lstm_output, next_hidden, next_cell_state = self.lstm(tf.expand_dims(lstm_inputs, axis=1),
