@@ -69,4 +69,3 @@ if __name__ == '__main__':
          entity_keys=entity_keys, keys_mask=keys_mask,
          encoder_path='./encoder', decoder_path='./decoder', eos_ind=9)
 
-    # print (variables[0])

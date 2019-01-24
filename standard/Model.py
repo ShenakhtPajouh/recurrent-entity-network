@@ -1,7 +1,6 @@
 import tensorflow as tf
 from tensorflow.contrib import autograph
 import standard.prgrph_ending_classifier as prgrph_ending_classifier
-import Model
 
 K = tf.keras.backend
 
@@ -141,7 +140,7 @@ class EntityCell(tf.keras.Model):
 
 
 # @autograph.convert()
-def simple_entity_network(entity_cell, inputs, keys,
+def simple_entity_network(inputs, keys, entity_cell=None,
                           initial_entity_hidden_state=None,
                           use_shared_keys=False, return_last=True):
     """
@@ -160,11 +159,16 @@ def simple_entity_network(entity_cell, inputs, keys,
         if return_last = True then a tensor of shape [batch_size, key_num, dim] else shape of
                          [batch_size, seq_length, key_num, dim]
     """
+
     encoded_sents, mask = inputs
     seq_length = encoded_sents.shape[1]
     batch_size = encoded_sents.shape[0]
     key_num = keys.shape[1]
     entity_embedding_dim = keys.shape[2]
+
+    if entity_cell is None:
+        entity_cell = EntityCell(max_entity_num=key_num, entity_embedding_dim=entity_embedding_dim,
+                                 name='entity_cell')
 
     if initial_entity_hidden_state is None:
         initial_entity_hidden_state = tf.tile(tf.expand_dims(entity_cell.get_initial_state(), axis=0),
@@ -173,6 +177,7 @@ def simple_entity_network(entity_cell, inputs, keys,
         entity_hiddens = initial_entity_hidden_state
     else:
         all_entity_hiddens = tf.expand_dims(initial_entity_hidden_state, axis=1)
+
     for i in range(seq_length):
         ''' to see which sentences are available '''
         indices = tf.where(mask[:, i])
@@ -302,10 +307,11 @@ class BasicRecurrentEntityEncoder(tf.keras.Model):
 
         encoded_sents = encoded_sents[:, 1:, :]
         sents_mask = prgrph_mask[:, :, 0]
-        return self.entity_cell, simple_entity_network(entity_cell=self.entity_cell, inputs=[encoded_sents, sents_mask], keys=keys,
-                                     initial_entity_hidden_state=initial_entity_hidden_state,
-                                     use_shared_keys=use_shared_keys,
-                                     return_last=return_last)
+        return self.entity_cell, simple_entity_network(entity_cell=self.entity_cell, inputs=[encoded_sents, sents_mask],
+                                                       keys=keys,
+                                                       initial_entity_hidden_state=initial_entity_hidden_state,
+                                                       use_shared_keys=use_shared_keys,
+                                                       return_last=return_last)
 
 
 class RNNRecurrentEntityEncoder(tf.keras.Model):
@@ -562,7 +568,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                         if return_last:
                             prev_states = tf.gather(entity_hiddens, indices)
                             print("entity_hiddens shape:", entity_hiddens.shape)
-                            print('return last=',return_last, 'prev_states shape:', prev_states.shape)
+                            print('return last=', return_last, 'prev_states shape:', prev_states.shape)
                         else:
                             prev_states = tf.gather(all_entity_hiddens[:, -1, :, :], indices)
                         curr_sents_curr_hidden = self.calculate_hidden(curr_sents_prev_hiddens, prev_states,
@@ -696,7 +702,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                         if initial_hidden_state is None:
                             curr_sents_curr_hidden = self.start_hidden_dense(
                                 tf.reduce_sum(tf.multiply(entity_hiddens,
-                                                          tf.expand_dims(tf.cast(keys_mask, dtype=tf.float32),axis=2)), axis=1))
+                                                          tf.expand_dims(tf.cast(keys_mask, dtype=tf.float32), axis=2)), axis=1))
                         else:
                             curr_sents_curr_hidden = initial_hidden_state
                         cell_states = tf.zeros([batch_size, self.rnn_hidden_size], tf.float32)
@@ -816,7 +822,8 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                                                axis=1)
                 # print("unfinished_prgrphs_indices",unfinished_prgrphs_indices)
                 sents_mask = tf.scatter_nd(tf.expand_dims(unfinished_prgrphs_indices, axis=1),
-                                           tf.expand_dims(tf.ones([unfinished_prgrphs_indices.shape[0]], dtype=tf.bool),axis=1),
+                                           tf.expand_dims(tf.ones([unfinished_prgrphs_indices.shape[0]], dtype=tf.bool),
+                                                          axis=1),
                                            [batch_size, 1])
                 if return_last:
                     entity_hiddens = simple_entity_network(entity_cell=self.entity_cell,
@@ -836,13 +843,15 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                 if return_last:
                     # print("show me!: ", entity_hiddens.shape)
                     classifier_results = self.prgrph_ending_classifier([curr_prgrphs_last_hiddens,
-                                                                        tf.gather(entity_hiddens,unfinished_prgrphs_indices),
-                                                                        tf.gather(keys_mask,unfinished_prgrphs_indices)])
+                                                                        tf.gather(entity_hiddens,
+                                                                                  unfinished_prgrphs_indices),
+                                                                        tf.gather(keys_mask,
+                                                                                  unfinished_prgrphs_indices)])
                 else:
                     classifier_results = self.prgrph_ending_classifier(
                         [curr_prgrphs_last_hiddens,
-                         tf.gather(all_entity_hiddens[:, -1, :, :],unfinished_prgrphs_indices),
-                         tf.gather(keys_mask,unfinished_prgrphs_indices)])
+                         tf.gather(all_entity_hiddens[:, -1, :, :], unfinished_prgrphs_indices),
+                         tf.gather(keys_mask, unfinished_prgrphs_indices)])
                 'classifier_results : probabilities'
                 print('classifier_results', classifier_results)
                 bool_results = tf.squeeze(tf.less(classifier_results, 0.5), axis=1)
