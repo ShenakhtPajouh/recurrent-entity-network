@@ -69,7 +69,7 @@ def train(embedding_matrix, entity_num, entity_embedding_dim, rnn_hidden_size, v
         print("encoder variables")
         print(len(encoder.variables))
         print("variables")
-        print(variables)
+        # print(variables)
     optimizer.apply_gradients(zip(gradients, variables), global_step=tf.train.get_or_create_global_step())
 
     'saving the encoder'

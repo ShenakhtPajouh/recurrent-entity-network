@@ -90,6 +90,7 @@ class EntityCell(tf.keras.Model):
                        shape=[curr_prgrphs_num, self.max_entity_num, self.entity_embedding_dim]))
         'h_tilda shape: [current_prgrphs_num, entity_num, entity_embedding_dim]'
         # tf.multiply(gates,h_tilda)
+        print("gates shape:", gates.shape)
         updated_hiddens = current_hiddens + tf.multiply(
             tf.tile(tf.expand_dims(gates, axis=2), [1, 1, self.entity_embedding_dim]), h_tilda)
 
@@ -161,6 +162,7 @@ def simple_entity_network(inputs, keys, entity_cell=None,
     """
 
     encoded_sents, mask = inputs
+    # print("encoded_sents shape:", encoded_sents.shape)
     seq_length = encoded_sents.shape[1]
     batch_size = encoded_sents.shape[0]
     key_num = keys.shape[1]
@@ -183,6 +185,7 @@ def simple_entity_network(inputs, keys, entity_cell=None,
         indices = tf.where(mask[:, i])
         indices = tf.cast(tf.squeeze(indices, axis=1), tf.int32)
         curr_encoded_sents = tf.gather(encoded_sents[:, i, :], indices)
+        # print("curr_encoded_sents shape:",curr_encoded_sents.shape)
         curr_keys = tf.gather(keys, indices)
         if return_last:
             prev_states = tf.gather(entity_hiddens, indices)
@@ -249,10 +252,6 @@ def rnn_entity_network_decoder(entity_cell, rnn_cell, softmax_layer, embedding_l
 """
 
 """
-
-
-# def get_embeddings(self,embedding_matrix,input):
-#     return tf.nn.embedding_lookup(embedding_matrix, input)
 
 class BasicRecurrentEntityEncoder(tf.keras.Model):
     def __init__(self, embedding_matrix, max_entity_num=None, entity_embedding_dim=None, entity_cell=None, name=None,
