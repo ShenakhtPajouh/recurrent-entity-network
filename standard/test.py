@@ -41,9 +41,10 @@ def test(embedding_matrix, entity_num, entity_embedding_dim, rnn_hidden_size, vo
     entity_cell, entity_hiddens = encoder([p1, p1_mask], entity_keys)
     # print("entity_hiddens shape:", entity_hiddens)
     decoder_inputs_test = [entity_hiddens, max_sent_num, max_sent_len, eos_ind, start_token]
-    generated_prgrph = decoder(inputs=decoder_inputs_test, keys=entity_keys, keys_mask=keys_mask,
-                               training=False)
+    generated_prgrph, second_prgrph_entities = decoder(inputs=decoder_inputs_test, keys=entity_keys, keys_mask=keys_mask,
+                               training=False, return_last=False)
     print(generated_prgrph)
+    print(second_prgrph_entities.shape)
 
 
 if __name__ == '__main__':

@@ -113,17 +113,6 @@ class EntityCell(tf.keras.Model):
             next_state: tensor of shape [batch_size, key_num, dim]
         """
 
-        # assert isinstance(inputs, list)
-
-        # current_hiddens = tf.gather(self.hiddens, indices)
-        # print('ENCODE')
-        # print(self.keys.shape)
-        # print(indices)
-        # current_keys = tf.gather(self.keys, indices)
-
-        # if current_hiddens.shape != current_keys.shape:
-        #     raise AttributeError('hiddens and kes must have same shape')
-
         encoded_sents = inputs
         gates = self.get_gate(encoded_sents, prev_states, keys)
         updated_hiddens = self.update_hidden(gates, prev_states, keys, encoded_sents)
@@ -157,8 +146,8 @@ def simple_entity_network(inputs, keys, entity_cell=None,
         return_last: if it is True, it returns the last state, else returns all states
 
     Returns:
-        if return_last = True then a tensor of shape [batch_size, key_num, dim] else shape of
-                         [batch_size, seq_length, key_num, dim]
+        if return_last = True then a tensor of shape [batch_size, key_num, dim] (entity_hiddens)
+        else of shape [batch_size, seq_length+1 , key_num, dim] it includes initial hidden states as well as states for each step ,total would be seq_len+1
     """
 
     encoded_sents, mask = inputs
@@ -178,6 +167,7 @@ def simple_entity_network(inputs, keys, entity_cell=None,
     if return_last:
         entity_hiddens = initial_entity_hidden_state
     else:
+        print("return_lastttttttttt:",return_last)
         all_entity_hiddens = tf.expand_dims(initial_entity_hidden_state, axis=1)
 
     for i in range(seq_length):
@@ -306,6 +296,7 @@ class BasicRecurrentEntityEncoder(tf.keras.Model):
 
         encoded_sents = encoded_sents[:, 1:, :]
         sents_mask = prgrph_mask[:, :, 0]
+        print("return_last_encoder",return_last)
         return self.entity_cell, simple_entity_network(entity_cell=self.entity_cell, inputs=[encoded_sents, sents_mask],
                                                        keys=keys,
                                                        initial_entity_hidden_state=initial_entity_hidden_state,
@@ -861,7 +852,10 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                 unfinished_prgrphs_indices = tf.gather(unfinished_prgrphs_indices, not_ended_prgrphs_indices)
                 # print('unfinished_prgrph_indices2', unfinished_prgrphs_indices)
 
-        return generated_prgrphs
+        if return_last:
+            return generated_prgrphs, entity_hiddens
+        else:
+            return generated_prgrphs, all_entity_hiddens
 
     def call(self, inputs, keys, keys_mask, training, initial_hidden_state=None,
              encoder_hidden_states=None, labels=None,
