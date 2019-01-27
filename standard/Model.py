@@ -65,9 +65,9 @@ class EntityCell(tf.keras.Model):
             output: gates of shape : [curr_prgrphs_num, entity_num]
         """
 
-        print('enocded_sents dtype:', encoded_sents.dtype)
+        print('enocded_sents dtype:', tf.shape(encoded_sents))
         print('current_hiddens dtype:', current_hiddens.dtype)
-        print('enocded_sents shape:', encoded_sents.shape)
+        print('enocded_sents shape:', tf.shape(encoded_sents))
         return tf.sigmoid(tf.reduce_sum(tf.multiply(tf.expand_dims(encoded_sents, 1), current_hiddens) +
                                         tf.multiply(tf.expand_dims(encoded_sents, 1), current_keys), axis=2))
 
@@ -81,7 +81,7 @@ class EntityCell(tf.keras.Model):
                     current_hiddens: [current_prgrphs_num, entity_num, entity_embedding_dim]
                     current_keys: [current_prgrphs_num, entity_num, entity_embedding_dim]
         """
-        curr_prgrphs_num = current_hiddens.shape[0]
+        curr_prgrphs_num = tf.shape(current_hiddens)[0]
         h_tilda = self.activation(
             tf.reshape(tf.matmul(tf.reshape(current_hiddens, [-1, self.entity_embedding_dim]), self.U) +
                        tf.matmul(tf.reshape(current_keys, [-1, self.entity_embedding_dim]), self.V) +
@@ -90,7 +90,7 @@ class EntityCell(tf.keras.Model):
                        shape=[curr_prgrphs_num, self.max_entity_num, self.entity_embedding_dim]))
         'h_tilda shape: [current_prgrphs_num, entity_num, entity_embedding_dim]'
         # tf.multiply(gates,h_tilda)
-        print("gates shape:", gates.shape)
+        print("gates shape:", tf.shape(gates))
         updated_hiddens = current_hiddens + tf.multiply(
             tf.tile(tf.expand_dims(gates, axis=2), [1, 1, self.entity_embedding_dim]), h_tilda)
 
@@ -152,10 +152,10 @@ def simple_entity_network(inputs, keys, entity_cell=None,
 
     encoded_sents, mask = inputs
     # print("encoded_sents shape:", encoded_sents.shape)
-    seq_length = encoded_sents.shape[1]
-    batch_size = encoded_sents.shape[0]
-    key_num = keys.shape[1]
-    entity_embedding_dim = keys.shape[2]
+    seq_length = tf.shape(encoded_sents)[1]
+    batch_size = tf.shape(encoded_sents)[0]
+    key_num = tf.shape(keys)[1]
+    entity_embedding_dim = tf.shape(keys)[2]
 
     if entity_cell is None:
         entity_cell = EntityCell(max_entity_num=key_num, entity_embedding_dim=entity_embedding_dim,
@@ -181,7 +181,7 @@ def simple_entity_network(inputs, keys, entity_cell=None,
             prev_states = tf.gather(entity_hiddens, indices)
             updated_hiddens = entity_cell(curr_encoded_sents, prev_states, curr_keys)
             entity_hiddens = entity_hiddens + tf.scatter_nd(tf.expand_dims(indices, 1), updated_hiddens - prev_states,
-                                                            keys.shape)
+                                                            tf.shape(keys))
         else:
             prev_states = tf.gather(all_entity_hiddens[:, -1, :, :], indices)
             updated_hiddens = tf.expand_dims(entity_cell(curr_encoded_sents, prev_states, curr_keys), axis=1)
@@ -279,11 +279,11 @@ class BasicRecurrentEntityEncoder(tf.keras.Model):
         if len(inputs) != 2:
             raise AttributeError('expected 2 inputs but', len(inputs), 'were given')
         prgrph, prgrph_mask = inputs
-        batch_size = prgrph.shape[0]
-        max_sent_num = prgrph.shape[1]
+        batch_size = tf.shape(prgrph)[0]
+        max_sent_num = tf.shape(prgrph)[1]
         prgrph_embeddings = tf.nn.embedding_lookup(self.embedding_matrix, prgrph)
         'prgrph_embeddings shape: [batch_size, max_sent_num, max_sent_len, embedding_dim]'
-        encoded_sents = tf.zeros([batch_size, 1, prgrph_embeddings.shape[3]])
+        encoded_sents = tf.zeros([batch_size, 1, tf.shape(prgrph_embeddings)[3]])
         for i in range(max_sent_num):
             ''' to see which sentences are available '''
             indices = tf.where(prgrph_mask[:, i, 0])
@@ -326,7 +326,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
         super().__init__(name=name)
         self.embedding_matrix = embedding_matrix
         self.rnn_hidden_size = rnn_hidden_size
-        self.embedding_dim = embedding_matrix.shape[1]
+        self.embedding_dim = tf.shape(embedding_matrix)[1]
         if vocab_size is not None:
             self.vocab_size = vocab_size
 
@@ -391,9 +391,9 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
             output shape: [curr_prgrphs_num, hidden_size]
         '''
         print('in attention_hiddens')
-        print('keys shape:', keys.shape)
-        print('query shape:', query.shape)
-        print('mask shape', memory_mask.shape)
+        # print('keys shape:', keys.shape)
+        # print('query shape:', query.shape)
+        # print('mask shape', memory_mask.shape)
         values = tf.identity(keys)
         query_shape = tf.shape(query)
         keys_shape = tf.shape(keys)
@@ -468,14 +468,15 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
             key and value: prev_columns
         """
         attn_hiddens_output = self.attention_hiddens(
-            curr_sents_prev_hiddens[:, curr_sents_prev_hiddens.shape[1] - 1, :],
-            curr_sents_prev_hiddens[:, :curr_sents_prev_hiddens.shape[1], :], hiddens_mask)
+            curr_sents_prev_hiddens[:, tf.shape(curr_sents_prev_hiddens)[1] - 1, :],
+            curr_sents_prev_hiddens[:, :tf.shape(curr_sents_prev_hiddens)[1], :], hiddens_mask)
         attn_entities_output = self.attention_entities(attn_hiddens_output, entities, keys_mask)
         return self.entity_dense(attn_entities_output)
 
     def get_embeddings(self, input):
         return tf.nn.embedding_lookup(self.embedding_matrix, input)
 
+    # @autograph.convert()
     def decode_train(self, inputs, labels, keys, keys_mask, encoder_hidden_states=None,
                      initial_hidden_state=None, use_shared_keys=False,
                      return_last=True, attention=False, self_attention=False):
@@ -501,9 +502,9 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
         test_mode_bool, entity_hiddens, vocab_size, start_token = inputs
         print(entity_hiddens.shape)
         prgrph, prgrph_mask = labels
-        batch_size = prgrph.shape[0]
-        max_sent_num = prgrph.shape[1]
-        max_sent_len = prgrph.shape[2]
+        batch_size = tf.shape(prgrph)[0]
+        max_sent_num = tf.shape(prgrph)[1]
+        max_sent_len = tf.shape(prgrph)[2]
 
         prgrph_embeddings = self.get_embeddings(prgrph)
 
@@ -534,7 +535,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                 indices = tf.cast(tf.where(prgrph_mask[:, i, j]), dtype=tf.int32)
                 print('indices shape:', indices.shape)
                 indices = tf.squeeze(indices, axis=1)
-                if indices.shape[0] > 0:
+                if tf.shape(indices)[0] > 0:
                     # print('indices_p2_mask:',indices)   #indices_p2_mask: tf.Tensor([[0]], shape=(1, 1), dtype=int64)
                     if j == 0:
                         # print('start token',self.embedding_matrix[self.start_token].shape)
@@ -578,20 +579,20 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                                                               [batch_size, self.rnn_hidden_size])
                     print('next_hidden shape:', next_hidden.shape)
                     'output shape:[len(indices), hidden_size] here, output is equal to next_hidden'
-                    index_vector = tf.ones([indices.shape[0], 1], tf.int32) * (i * max_sent_len + j)
+                    index_vector = tf.ones([tf.shape(indices)[0], 1], tf.int32) * (i * max_sent_len + j)
                     print('indices type:', indices.dtype)
                     new_indices = tf.concat(values=[tf.expand_dims(indices, 1), index_vector], axis=1)
                     print('new_indices:', new_indices)
                     hidden_states = hidden_states + tf.scatter_nd(new_indices, next_hidden,
-                                                                  shape=[batch_size, hidden_states.shape[1],
+                                                                  shape=[batch_size, tf.shape(hidden_states)[1],
                                                                          self.rnn_hidden_size])
                     print('hidden_state.shape', hidden_states.shape)
                     # print('hidden_states:',hidden_states)
                     output = self.softmax_layer(output)
                     print('ouput_shape', output.shape)
 
-                    second_dim_ind = tf.ones([indices.shape[0], 1], tf.int32) * i
-                    third_dim_ind = tf.ones([indices.shape[0], 1], tf.int32) * j
+                    second_dim_ind = tf.ones([tf.shape(indices)[0], 1], tf.int32) * i
+                    third_dim_ind = tf.ones([tf.shape(indices)[0], 1], tf.int32) * j
                     new_indices_output = tf.keras.layers.concatenate(
                         inputs=[tf.expand_dims(indices, 1), second_dim_ind, third_dim_ind], axis=1)
                     final_output = final_output + tf.scatter_nd(new_indices_output, output,
@@ -605,7 +606,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                         tf.scatter_nd(new_indices_output, lstm_targets, shape=[batch_size, max_sent_num, max_sent_len]),
                         dtype=tf.int32)
 
-                    t = tf.ones([indices.shape[0]], dtype=tf.int32)
+                    t = tf.ones([tf.shape(indices)[0]], dtype=tf.int32)
                     output_mask = output_mask + tf.scatter_nd(new_indices_output, t,
                                                               shape=[batch_size, max_sent_num, max_sent_len])
 
@@ -633,6 +634,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
         output_mask = tf.reshape(output_mask, [batch_size, -1])
         return final_output, final_targets, output_mask
 
+    # @autograph.convert()
     def decode_test(self, inputs, keys, keys_mask, encoder_hidden_states=None,
                     initial_hidden_state=None, use_shared_keys=False,
                     return_last=True, attention=False, self_attention=False):
@@ -650,7 +652,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
 
         entity_hiddens, max_sent_num, max_sent_len, eos_ind, start_token = inputs
 
-        batch_size = entity_hiddens.shape[0]
+        batch_size = tf.shape(entity_hiddens)[0]
 
         ' stores previous hidden_states of the lstm for the prgrph '
         hidden_states = tf.zeros([batch_size, max_sent_num * max_sent_len, self.rnn_hidden_size])
@@ -674,7 +676,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
 
         for i in range(max_sent_num):
             indices = tf.identity(unfinished_prgrphs_indices)
-            if indices.shape[0] > 0:
+            if tf.shape(indices)[0] > 0:
                 for j in range(max_sent_len):
                     print('current word indeX:', i, j)
                     print("GENERATED PARAGRAPHS")
@@ -697,9 +699,9 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                             curr_sents_curr_hidden = initial_hidden_state
                         cell_states = tf.zeros([batch_size, self.rnn_hidden_size], tf.float32)
                     else:
-                        print('hidden_states shape:', hidden_states.shape)
+                        print('hidden_states shape:', tf.shape(hidden_states))
                         curr_sents_prev_hiddens = tf.gather(hidden_states[:, :i * max_sent_len + j, :], indices)
-                        print('curr_sents_prev_hiddens shape:', curr_sents_prev_hiddens.shape, indices.shape)
+                        print('curr_sents_prev_hiddens shape:', tf.shape(curr_sents_prev_hiddens), tf.shape(indices))
                         curr_sents_prev_hiddens_mask = tf.gather(hiddens_mask[:, 1:], indices)
                         # curr_sents_entities = tf.gather(self.update_entity_module.hiddens, indices)
                         if return_last:
@@ -739,17 +741,17 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                                                               next_cell_state - curr_cells_prev_state,
                                                               [batch_size, self.rnn_hidden_size])
 
-                    print('next_hidden shape:', next_hidden.shape)
+                    print('next_hidden shape:', tf.shape(next_hidden))
                     'output shape:[available_prgrphs_num, hidden_size] here, output is equal to next_hidden'
-                    index_vector = tf.ones([indices.shape[0], 1], tf.int32) * (i * max_sent_len + j)
+                    index_vector = tf.ones([tf.shape(indices)[0], 1], tf.int32) * (i * max_sent_len + j)
                     new_indices = tf.keras.layers.concatenate(inputs=[tf.expand_dims(indices, 1), index_vector],
                                                               axis=1)
                     print('new_indices:', new_indices)
                     hidden_states = hidden_states + tf.scatter_nd(new_indices, next_hidden,
-                                                                  shape=[batch_size, hidden_states.shape[1],
+                                                                  shape=[batch_size, tf.shape(hidden_states)[1],
                                                                          self.rnn_hidden_size])
                     'constructing next_hidden mask and concatenating to hiddens_mask'
-                    boolean_vec = tf.ones(indices.shape[0], dtype=tf.bool)
+                    boolean_vec = tf.ones(tf.shape(indices)[0], dtype=tf.bool)
                     next_hidden_mask = tf.scatter_nd(tf.expand_dims(indices, axis=1),
                                                      tf.expand_dims(boolean_vec, axis=1),
                                                      shape=[batch_size, 1])
@@ -760,14 +762,14 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                     last_output = tf.cast(tf.argmax(lstm_output, dimension=1), tf.int32)
 
                     if j == max_sent_len - 1:
-                        last_output = tf.cast(tf.ones([indices.shape[0]]) * eos_ind, dtype=tf.int32)
+                        last_output = tf.cast(tf.ones([tf.shape(indices)[0]]) * eos_ind, dtype=tf.int32)
                     'last_output is a one_dimensional vector'
-                    print('last_output shape and dtype:', last_output.shape, last_output.dtype)
+                    print('last_output shape and dtype:', tf.shape(last_output), last_output.dtype)
                     # a=tf.ones([last_output.shape[0]]) * i
                     # print(a)
                     generated_words_indices = tf.transpose(tf.stack([indices,
-                                                                     tf.cast(tf.ones([indices.shape[0]]) * i, tf.int32),
-                                                                     tf.cast(tf.ones([indices.shape[0]]) * j,
+                                                                     tf.cast(tf.ones([tf.shape(indices)[0]]) * i, tf.int32),
+                                                                     tf.cast(tf.ones([tf.shape(indices)[0]]) * j,
                                                                              tf.int32)]))
                     generated_prgrphs = generated_prgrphs + tf.cast(tf.scatter_nd(generated_words_indices, last_output,
                                                                                   [batch_size, max_sent_num,
@@ -784,9 +786,9 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                     eos_indices = tf.cast(tf.where(tf.equal(last_output, eos_ind)), tf.int32)
                     # print('last_output',last_output)
                     # print('eos_indices',eos_indices)
-                    if (eos_indices.shape[0] > 0):
-                        hidden_index_vec = tf.ones([eos_indices.shape[0]]) * (i * max_sent_len + j)
-                        index_vec2 = tf.ones([eos_indices.shape[0], 1], tf.int32) * i
+                    if (tf.shape(eos_indices)[0] > 0):
+                        hidden_index_vec = tf.ones([tf.shape(eos_indices)[0]]) * (i * max_sent_len + j)
+                        index_vec2 = tf.ones([tf.shape(eos_indices)[0], 1], tf.int32) * i
                         new_indices2 = tf.keras.layers.concatenate(inputs=[eos_indices, index_vec2], axis=1)
                         ending_hidden_indices = ending_hidden_indices + tf.cast(
                             tf.scatter_nd(new_indices2, hidden_index_vec,
@@ -796,7 +798,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
 
                 'updating unfinished_sents_indices'
                 ending_hidden_indices_upto_i = tf.gather(ending_hidden_indices, unfinished_prgrphs_indices)[:, :i + 1]
-                print('ending_hiddens_upto_i', ending_hidden_indices_upto_i.shape)
+                print('ending_hiddens_upto_i', tf.shape(ending_hidden_indices_upto_i))
                 a = tf.tile(tf.expand_dims(unfinished_prgrphs_indices, 1), multiples=[1, i + 1])
                 ending_indices = tf.keras.layers.concatenate(
                     [tf.expand_dims(a, axis=2), tf.expand_dims(ending_hidden_indices_upto_i, axis=2)], axis=2)
@@ -812,7 +814,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                                                axis=1)
                 # print("unfinished_prgrphs_indices",unfinished_prgrphs_indices)
                 sents_mask = tf.scatter_nd(tf.expand_dims(unfinished_prgrphs_indices, axis=1),
-                                           tf.expand_dims(tf.ones([unfinished_prgrphs_indices.shape[0]], dtype=tf.bool),
+                                           tf.expand_dims(tf.ones([tf.shape(unfinished_prgrphs_indices)[0]], dtype=tf.bool),
                                                           axis=1),
                                            [batch_size, 1])
                 if return_last:
