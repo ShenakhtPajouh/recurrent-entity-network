@@ -1,7 +1,7 @@
 import tensorflow as tf
 import tensorflow.contrib.eager as tfe
 import os
-import standard.Model as Model
+import Model
 import numpy as np
 
 

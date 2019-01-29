@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow.contrib import autograph
-import standard.prgrph_ending_classifier as prgrph_ending_classifier
+import prgrph_ending_classifier as prgrph_ending_classifier
 
 K = tf.keras.backend
 

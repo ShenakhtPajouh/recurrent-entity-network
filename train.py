@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import tensorflow.contrib.seq2seq as seq2seq
 import os
-import standard.Model as Model
+import Model
 import tensorflow.contrib.eager as tfe
 import time
 
