@@ -24,8 +24,8 @@ def test(embedding_matrix, entity_num, entity_embedding_dim, rnn_hidden_size, vo
     labels = [p2, p2_mask]
     decoder(inputs=decoder_inputs_train, keys=entity_keys,
             keys_mask=keys_mask, training=True, labels=labels)
-    max_sent_num = p1.shape[1]
-    max_sent_len = p1.shape[2]
+    max_sent_num = tf.shape(p1.shape)[1]
+    max_sent_len = tf.shape(p1)[2]
 
     ' restoring saved models '
     checkpoint_dir_encoder = encoder_path
@@ -64,9 +64,9 @@ if __name__ == '__main__':
     keys_mask = tf.concat([keys_mask, tf.expand_dims(
         tf.scatter_nd([[0], [1], [2], [3], [4]], [True, True, True, True, True], [10]), axis=0)], axis=0)
 
-    test(embedding_matrix=embedding, entity_num=entity_keys.shape[1],
-         entity_embedding_dim=entity_keys.shape[2],
-         rnn_hidden_size=15, vocab_size=10, start_token=6, max_sent_num=p1.shape[1], p1=p1, p1_mask=p1_mask,
+    test(embedding_matrix=embedding, entity_num=tf.shape(entity_keys)[1],
+         entity_embedding_dim=tf.shape(entity_keys)[2],
+         rnn_hidden_size=15, vocab_size=10, start_token=6, max_sent_num=tf.shape(p1)[1], p1=p1, p1_mask=p1_mask,
          entity_keys=entity_keys, keys_mask=keys_mask,
          encoder_path='./encoder', decoder_path='./decoder', eos_ind=9)
 

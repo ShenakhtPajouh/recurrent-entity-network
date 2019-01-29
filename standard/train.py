@@ -116,9 +116,9 @@ if __name__ == '__main__':
     # entities=static_recur_entNet(inputs=encode_inputs)
     # print(entities)
 
-    total_loss = train(embedding_matrix=embedding, entity_num=entity_keys.shape[1],
-                       entity_embedding_dim=entity_keys.shape[2],
-                       rnn_hidden_size=15, vocab_size=10, start_token=6, max_sent_num=p1.shape[1], p1=p1,
+    total_loss = train(embedding_matrix=embedding, entity_num=tf.shape(entity_keys)[1],
+                       entity_embedding_dim=tf.shape(entity_keys)[2],
+                       rnn_hidden_size=15, vocab_size=10, start_token=6, max_sent_num=tf.shape(p1)[1], p1=p1,
                        p1_mask=p1_mask,
                        p2=p2, p2_mask=p2_mask, entity_keys=entity_keys, keys_mask=keys_mask,
                        encoder_save_path='./encoder', decoder_save_path='./decoder',

@@ -55,7 +55,7 @@ class Prgrph_ending_classifier(tf.keras.Model):
             output shape: [curr_prgrphs_num, entity_embedding_dim]
         '''
 
-        print("attention_entities, entities shape: ", entities.shape)
+        print("attention_entities, entities shape: ", tf.shape(entities))
 
         values = tf.identity(entities)
         query_shape = tf.shape(query)
@@ -98,11 +98,11 @@ class Prgrph_ending_classifier(tf.keras.Model):
             raise AttributeError('expected 3 inputs but ',len(inputs),' were given')
         encoded_sents,entities, keys_mask =inputs
         # print(encoded_sents.shape,self.position_embeddings.shape)
-        curr_prgrphs_num=encoded_sents.shape[0]
-        sents_num=encoded_sents.shape[1]
+        curr_prgrphs_num=tf.shape(encoded_sents)
+        sents_num=tf.shape(encoded_sents)[1]
         encoded_sents=encoded_sents+tf.tile(tf.expand_dims(self.position_embeddings[:sents_num,:],axis=0),[curr_prgrphs_num,1,1])
-        attn_hiddens_output = self.attention_prev_sents(encoded_sents[:, encoded_sents.shape[1] - 1, :],
-                                                     encoded_sents[:, :encoded_sents.shape[1], :])
+        attn_hiddens_output = self.attention_prev_sents(encoded_sents[:, tf.shape(encoded_sents)[1] - 1, :],
+                                                     encoded_sents[:, :tf.shape(encoded_sents)[1], :])
         attn_entities_output = self.attention_entities(attn_hiddens_output, entities, keys_mask)
         # print('attn_entities_output',attn_entities_output)
         # print(tf.sigmoid(self.dense(attn_entities_output)))
