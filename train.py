@@ -7,7 +7,6 @@ import tensorflow.contrib.eager as tfe
 import time
 
 
-
 def calculate_loss(outputs, lstm_targets,mask):
     """
     Args:
