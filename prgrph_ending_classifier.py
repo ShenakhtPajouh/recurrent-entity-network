@@ -11,7 +11,7 @@ class Prgrph_ending_classifier(tf.keras.Model):
         self.max_sent_num=max_sent_num
         self.entity_embedding_dim=entity_embedding_dim
         self.encoding_dim=encoding_dim
-        p_vec=tf.range(self.max_sent_num,dtype=tf.float64)
+        p_vec=tf.range(tf.cast(self.max_sent_num,tf.float64),dtype=tf.float64)
         p_vec_tiled=tf.tile(tf.expand_dims(p_vec,axis=1),[1,encoding_dim])
         index_vec=tf.range(self.encoding_dim)
         index_vec_tiled=tf.tile(tf.divide(tf.expand_dims(index_vec,axis=0),self.encoding_dim),[self.max_sent_num,1])
@@ -98,7 +98,7 @@ class Prgrph_ending_classifier(tf.keras.Model):
             raise AttributeError('expected 3 inputs but ',len(inputs),' were given')
         encoded_sents,entities, keys_mask =inputs
         # print(encoded_sents.shape,self.position_embeddings.shape)
-        curr_prgrphs_num=tf.shape(encoded_sents)
+        curr_prgrphs_num=tf.shape(encoded_sents)[0]
         sents_num=tf.shape(encoded_sents)[1]
         encoded_sents=encoded_sents+tf.tile(tf.expand_dims(self.position_embeddings[:sents_num,:],axis=0),[curr_prgrphs_num,1,1])
         attn_hiddens_output = self.attention_prev_sents(encoded_sents[:, tf.shape(encoded_sents)[1] - 1, :],

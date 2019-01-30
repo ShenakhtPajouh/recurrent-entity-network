@@ -1,7 +1,7 @@
 import tensorflow as tf
 import tensorflow.contrib.eager as tfe
 import os
-import Model as Model
+import Model
 import numpy as np
 
 
@@ -24,7 +24,7 @@ def test(embedding_matrix, entity_num, entity_embedding_dim, rnn_hidden_size, vo
     labels = [p2, p2_mask]
     decoder(inputs=decoder_inputs_train, keys=entity_keys,
             keys_mask=keys_mask, training=True, labels=labels)
-    max_sent_num = tf.shape(p1.shape)[1]
+    max_sent_num = tf.shape(p1)[1]
     max_sent_len = tf.shape(p1)[2]
 
     ' restoring saved models '
