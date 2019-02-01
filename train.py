@@ -43,24 +43,29 @@ def train(embedding_matrix, entity_num, entity_embedding_dim, rnn_hidden_size, v
                                                entity_cell=entity_cell,
                                                vocab_size=vocab_size, max_sent_num=max_sent_num,
                                                entity_embedding_dim=entity_embedding_dim)
-    if len(first_prgrph_entities.shape)==3:
+    if len(first_prgrph_entities.shape) == 3:
         decoder_inputs_train = [False, first_prgrph_entities, vocab_size, start_token]
-    else :
+    else:
         'return_last in encoder has been false'
-        decoder_inputs_train = [False, first_prgrph_entities[:,-1,:,:], vocab_size, start_token]
+        decoder_inputs_train = [False, first_prgrph_entities[:, -1, :, :], vocab_size, start_token]
 
     labels = [p2, p2_mask]
 
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
 
     variables = decoder.variables + encoder.variables
+    # output, lstm_targets, mask, entity_hiddens = decoder(inputs=decoder_inputs_train, keys=entity_keys,
+    #                                                      keys_mask=keys_mask, training=True, labels=labels)
+    # with tf.Session() as sess:
+    #     sess.run(tf.global_variables_initializer())
+    #     output,lstm_targets,mask,entity_hiddens=sess.run([output,lstm_targets,mask,entity_hiddens])
 
     # print('in for,GD')
     with tf.GradientTape() as tape:
         print('in tf.GradientTape')
         start = time.time()
-        output, lstm_targets, mask = decoder(inputs=decoder_inputs_train, keys=entity_keys,
-                                             keys_mask=keys_mask, training=True, labels=labels)
+        output, lstm_targets, mask, entity_hiddens = decoder(inputs=decoder_inputs_train, keys=entity_keys,
+                                                             keys_mask=keys_mask, training=True, labels=labels)
         end = time.time()
         training_time = end - start
         print('training_time:', training_time)
