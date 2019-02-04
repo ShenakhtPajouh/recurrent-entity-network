@@ -597,6 +597,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                     print('final_targets dtype', final_targets.dtype)
                     print(tf.scatter_nd(new_indices_output, lstm_targets,
                                         shape=[batch_size, max_sent_num, max_sent_len]).dtype)
+
                     final_targets = final_targets + tf.cast(
                         tf.scatter_nd(new_indices_output, lstm_targets, shape=[batch_size, max_sent_num, max_sent_len]),
                         dtype=tf.int32)
