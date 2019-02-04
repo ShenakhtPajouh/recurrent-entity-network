@@ -31,18 +31,25 @@ def calculate_loss(outputs, lstm_targets, mask):
 
 
 def train(embedding_matrix, entity_num, entity_embedding_dim, rnn_hidden_size, vocab_size, start_token,
-          max_sent_num, p1, p1_mask, p2, p2_mask, entity_keys, keys_mask, encoder_save_path, decoder_save_path,
+          max_sent_num, max_sent_len, p1, p1_mask, p2, p2_mask, entity_keys, keys_mask, encoder_save_path, decoder_save_path,
           learning_rate):
-    encoder = Model.BasicRecurrentEntityEncoder(embedding_matrix=embedding_matrix, max_entity_num=entity_num,
+    # entity_num=tf.cast(entity_num,tf.int32)
+    # print(entity_num,entity_embedding_dim)
+    encoder = Model.BasicRecurrentEntityEncoder(embedding_matrix=embedding_matrix, max_sent_num=max_sent_num,
+                                                max_entity_num=entity_num,
                                                 entity_embedding_dim=entity_embedding_dim)
-    entity_cell, first_prgrph_entities = encoder([p1, p1_mask], entity_keys)
+    _, first_prgrph_entities = encoder([p1, p1_mask], entity_keys)
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        first_prgrph_entities = sess.run(first_prgrph_entities)
+        first_prgrph_entities=tf.convert_to_tensor(first_prgrph_entities)
 
     print("first_prgrph_entities shape", first_prgrph_entities.shape)
 
     decoder = Model.RNNRecurrentEntitiyDecoder(embedding_matrix=embedding_matrix, rnn_hidden_size=rnn_hidden_size,
-                                               entity_cell=entity_cell,
+                                               max_entity_num=entity_num,
                                                vocab_size=vocab_size, max_sent_num=max_sent_num,
-                                               entity_embedding_dim=entity_embedding_dim)
+                                               entity_embedding_dim=entity_embedding_dim, max_sent_len=max_sent_len)
     if len(first_prgrph_entities.shape) == 3:
         decoder_inputs_train = [False, first_prgrph_entities, vocab_size, start_token]
     else:
@@ -54,51 +61,51 @@ def train(embedding_matrix, entity_num, entity_embedding_dim, rnn_hidden_size, v
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
 
     variables = decoder.variables + encoder.variables
-    # output, lstm_targets, mask, entity_hiddens = decoder(inputs=decoder_inputs_train, keys=entity_keys,
-    #                                                      keys_mask=keys_mask, training=True, labels=labels)
-    # with tf.Session() as sess:
-    #     sess.run(tf.global_variables_initializer())
-    #     output,lstm_targets,mask,entity_hiddens=sess.run([output,lstm_targets,mask,entity_hiddens])
+    output, lstm_targets, mask, entity_hiddens = decoder(inputs=decoder_inputs_train, keys=entity_keys,
+                                                         keys_mask=keys_mask, training=True, labels=labels)
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        output, lstm_targets, mask, entity_hiddens = sess.run([output, lstm_targets, mask, entity_hiddens])
 
     # print('in for,GD')
-    with tf.GradientTape() as tape:
-        print('in tf.GradientTape')
-        start = time.time()
-        output, lstm_targets, mask, entity_hiddens = decoder(inputs=decoder_inputs_train, keys=entity_keys,
-                                                             keys_mask=keys_mask, training=True, labels=labels)
-        end = time.time()
-        training_time = end - start
-        print('training_time:', training_time)
-        loss = calculate_loss(output, lstm_targets, mask)
-        gradients = tape.gradient(loss, variables)
-        # print('trainable_Variable:',static_recur_entNet.trainable_variables)
-        # print('gradients:',gradients)
-        # print('gradinets[0]',gradients[0])
-        print("decoder variables")
-        print(len(decoder.variables))
-        print("encoder variables")
-        print(len(encoder.variables))
-        print("variables")
-        # print(variables)
-    optimizer.apply_gradients(zip(gradients, variables), global_step=tf.train.get_or_create_global_step())
+    # with tf.GradientTape() as tape:
+    #     print('in tf.GradientTape')
+    #     start = time.time()
+    #     output, lstm_targets, mask, entity_hiddens = decoder(inputs=decoder_inputs_train, keys=entity_keys,
+    #                                                          keys_mask=keys_mask, training=True, labels=labels)
+    #     end = time.time()
+    #     training_time = end - start
+    #     print('training_time:', training_time)
+    #     loss = calculate_loss(output, lstm_targets, mask)
+    #     gradients = tape.gradient(loss, variables)
+    #     # print('trainable_Variable:',static_recur_entNet.trainable_variables)
+    #     # print('gradients:',gradients)
+    #     # print('gradinets[0]',gradients[0])
+    #     print("decoder variables")
+    #     print(len(decoder.variables))
+    #     print("encoder variables")
+    #     print(len(encoder.variables))
+    #     print("variables")
+    #     # print(variables)
+    # optimizer.apply_gradients(zip(gradients, variables), global_step=tf.train.get_or_create_global_step())
 
-    'saving the encoder'
-    checkpoint_dir_encoder = encoder_save_path
-    os.makedirs(checkpoint_dir_encoder, exist_ok=True)
-    checkpoint_prefix_encoder = os.path.join(checkpoint_dir_encoder, 'ckpt')
-    tfe.Saver(encoder.variables).save(checkpoint_prefix_encoder)
-
-    'saving the decoder'
-    checkpoint_dir_decoder = decoder_save_path
-    os.makedirs(checkpoint_dir_decoder, exist_ok=True)
-    checkpoint_prefix_decoder = os.path.join(checkpoint_dir_decoder, 'ckpt')
-    tfe.Saver(decoder.variables).save(checkpoint_prefix_decoder)
-
-    return loss
+    # 'saving the encoder'
+    # checkpoint_dir_encoder = encoder_save_path
+    # os.makedirs(checkpoint_dir_encoder, exist_ok=True)
+    # checkpoint_prefix_encoder = os.path.join(checkpoint_dir_encoder, 'ckpt')
+    # tfe.Saver(encoder.variables).save(checkpoint_prefix_encoder)
+    #
+    # 'saving the decoder'
+    # checkpoint_dir_decoder = decoder_save_path
+    # os.makedirs(checkpoint_dir_decoder, exist_ok=True)
+    # checkpoint_prefix_decoder = os.path.join(checkpoint_dir_decoder, 'ckpt')
+    # tfe.Saver(decoder.variables).save(checkpoint_prefix_decoder)
+    #
+    # return loss
 
 
 if __name__ == '__main__':
-    tf.enable_eager_execution()
+    # tf.enable_eager_execution()
     embedding = tf.random_normal([10, 20])
     p1 = np.asarray([[[0, 1, 9, 9], [2, 3, 4, 9], [1, 2, 3, 4]],
                      [[0, 1, 9, 9], [2, 3, 4, 7], [1, 2, 3, 4]]])
@@ -121,9 +128,10 @@ if __name__ == '__main__':
     # entities=static_recur_entNet(inputs=encode_inputs)
     # print(entities)
 
-    total_loss = train(embedding_matrix=embedding, entity_num=tf.shape(entity_keys)[1],
-                       entity_embedding_dim=tf.shape(entity_keys)[2],
-                       rnn_hidden_size=15, vocab_size=10, start_token=6, max_sent_num=tf.shape(p1)[1], p1=p1,
+    total_loss = train(embedding_matrix=embedding, entity_num=10,
+                       entity_embedding_dim=20,
+                       rnn_hidden_size=15, vocab_size=10, start_token=6, max_sent_num=3, max_sent_len=4,
+                       p1=p1,
                        p1_mask=p1_mask,
                        p2=p2, p2_mask=p2_mask, entity_keys=entity_keys, keys_mask=keys_mask,
                        encoder_save_path='./encoder', decoder_save_path='./decoder',
