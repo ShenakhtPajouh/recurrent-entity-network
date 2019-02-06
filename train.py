@@ -5,7 +5,7 @@ import os
 import Model
 import tensorflow.contrib.eager as tfe
 import time
-
+from tensorflow.contrib import autograph
 
 def calculate_loss(outputs, lstm_targets, mask):
     """
@@ -59,13 +59,16 @@ def train(embedding_matrix, entity_num, entity_embedding_dim, rnn_hidden_size, v
     labels = [p2, p2_mask]
 
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
-
     variables = decoder.variables + encoder.variables
+
+    # for i in range(3):
+    #     print("for, i:",i)
     output, lstm_targets, mask, entity_hiddens = decoder(inputs=decoder_inputs_train, keys=entity_keys,
-                                                         keys_mask=keys_mask, training=True, labels=labels)
+                                                             keys_mask=keys_mask, training=True, labels=labels)
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         output, lstm_targets, mask, entity_hiddens = sess.run([output, lstm_targets, mask, entity_hiddens])
+        print(output[0][0][0])
 
     # print('in for,GD')
     # with tf.GradientTape() as tape:

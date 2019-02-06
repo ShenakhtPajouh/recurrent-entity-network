@@ -667,8 +667,8 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                     third_dim_ind = tf.ones([tf.shape(indices)[0], 1], tf.int32) * j
 
                     indices_2=tf.multiply(tf.ones([tf.shape(indices)[0],1],tf.int32),tf.expand_dims(indices,1))
-                    new_indices_output = tf.keras.layers.concatenate(
-                        inputs=[indices_2, second_dim_ind, third_dim_ind], axis=1)
+                    new_indices_output = tf.concat(
+                        values=[indices_2, second_dim_ind, third_dim_ind], axis=1)
                     final_output = tf.add(final_output, tf.scatter_nd(new_indices_output, output,
                                                                       shape=[batch_size, self.max_sent_num,
                                                                              self.max_sent_len,
@@ -694,7 +694,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                                                    use_shared_keys=use_shared_keys, return_last=True)
         return final_targets, final_output, output_mask, entity_hiddens
 
-    @autograph.convert()
+    @autograph.convert(recursive=True)
     def language_model_False_rl(self, prgrph, prgrph_mask, prgrph_embeddings, entity_hiddens, start_token, vocab_size,
                                 keys,
                                 keys_mask, use_shared_keys):
