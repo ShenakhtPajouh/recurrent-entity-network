@@ -8,15 +8,20 @@ class Prgrph_ending_classifier(tf.keras.Model):
             name='prgrph_encoding_classifier'
 
         super().__init__(name)
-        self.max_sent_num=max_sent_num
-        self.entity_embedding_dim=entity_embedding_dim
-        self.encoding_dim=encoding_dim
-        p_vec=tf.range(tf.cast(self.max_sent_num,tf.float64),dtype=tf.float64)
-        p_vec_tiled=tf.tile(tf.expand_dims(p_vec,axis=1),[1,encoding_dim])
-        index_vec=tf.range(self.encoding_dim)
-        index_vec_tiled=tf.tile(tf.divide(tf.expand_dims(index_vec,axis=0),self.encoding_dim),[self.max_sent_num,1])
+        self.max_sent_num = max_sent_num
+        self.entity_embedding_dim = entity_embedding_dim
+        self.encoding_dim = encoding_dim
+        p_vec = tf.range(tf.cast(self.max_sent_num, tf.float64), dtype=tf.float64)
+        p_vec_tiled = tf.tile(tf.expand_dims(p_vec, axis=1), [1, encoding_dim])
+        index_vec = tf.range(self.encoding_dim)
+        index_vec_tiled = tf.tile(tf.divide(tf.expand_dims(index_vec, axis=0), self.encoding_dim),
+                                  [self.max_sent_num, 1])
+        index_vec_tiled = tf.cast(index_vec_tiled, tf.float64)
         # print('pow type:',type(tf.pow(200,index_vec_tiled)[0][0]))
-        self.position_embeddings=tf.cast(tf.sin(tf.divide(p_vec_tiled,tf.pow(200.0,index_vec_tiled))),tf.float32)
+        # print(tf.pow(200.0,index_vec_tiled).dtype,p_vec_tiled.dtype)
+
+        self.position_embeddings = tf.cast(
+        tf.sin(tf.divide(p_vec_tiled, tf.pow(tf.cast(200.0, tf.float64), index_vec_tiled))), tf.float32)
         'position_embeddings shape: [max_sent_num, encoding_dim]'
 
         self.dense=tf.layers.Dense(1)

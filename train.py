@@ -37,19 +37,31 @@ def train(embedding_matrix, entity_num, entity_embedding_dim, rnn_hidden_size, v
                                                 entity_embedding_dim=entity_embedding_dim)
     entity_cell, first_prgrph_entities = encoder([p1, p1_mask], entity_keys)
 
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        first_prgrph_entities = sess.run(first_prgrph_entities)
+
     print("first_prgrph_entities shape", first_prgrph_entities.shape)
 
     decoder = Model.RNNRecurrentEntitiyDecoder(embedding_matrix=embedding_matrix, rnn_hidden_size=rnn_hidden_size,
                                                entity_cell=entity_cell,
                                                vocab_size=vocab_size, max_sent_num=max_sent_num,
                                                entity_embedding_dim=entity_embedding_dim)
-    if len(first_prgrph_entities.shape)==3:
+    if len(first_prgrph_entities.shape) == 3:
         decoder_inputs_train = [False, first_prgrph_entities, vocab_size, start_token]
-    else :
+    else:
         'return_last in encoder has been false'
-        decoder_inputs_train = [False, first_prgrph_entities[:,-1,:,:], vocab_size, start_token]
+        decoder_inputs_train = [False, first_prgrph_entities[:, -1, :, :], vocab_size, start_token]
 
     labels = [p2, p2_mask]
+
+    output = decoder(inputs=decoder_inputs_train, keys=entity_keys,
+                                         keys_mask=keys_mask, training=True, labels=labels)
+
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        output = sess.run([output])
+        print("decode_train worked!")
 
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
 
@@ -93,7 +105,7 @@ def train(embedding_matrix, entity_num, entity_embedding_dim, rnn_hidden_size, v
 
 
 if __name__ == '__main__':
-    tf.enable_eager_execution()
+    # tf.enable_eager_execution()
     embedding = tf.random_normal([10, 20])
     p1 = np.asarray([[[0, 1, 9, 9], [2, 3, 4, 9], [1, 2, 3, 4]],
                      [[0, 1, 9, 9], [2, 3, 4, 7], [1, 2, 3, 4]]])
@@ -116,8 +128,8 @@ if __name__ == '__main__':
     # entities=static_recur_entNet(inputs=encode_inputs)
     # print(entities)
 
-    total_loss = train(embedding_matrix=embedding, entity_num=tf.shape(entity_keys)[1],
-                       entity_embedding_dim=tf.shape(entity_keys)[2],
+    total_loss = train(embedding_matrix=embedding, entity_num=10,
+                       entity_embedding_dim=20,
                        rnn_hidden_size=15, vocab_size=10, start_token=6, max_sent_num=tf.shape(p1)[1], p1=p1,
                        p1_mask=p1_mask,
                        p2=p2, p2_mask=p2_mask, entity_keys=entity_keys, keys_mask=keys_mask,
