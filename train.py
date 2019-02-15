@@ -58,9 +58,11 @@ def train(embedding_matrix, entity_num, entity_embedding_dim, rnn_hidden_size, v
     output = decoder(inputs=decoder_inputs_train, keys=entity_keys,
                                          keys_mask=keys_mask, training=True, labels=labels)
 
+
     with tf.Session() as sess:
+        print("inside decode session")
         sess.run(tf.global_variables_initializer())
-        output = sess.run([output])
+        output = sess.run(output)
         print("decode_train worked!")
 
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
