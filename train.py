@@ -40,7 +40,6 @@ def train(embedding_matrix, entity_num, entity_embedding_dim, rnn_hidden_size, v
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         first_prgrph_entities = sess.run(first_prgrph_entities)
-        sess.close()
 
     print("first_prgrph_entities shape", first_prgrph_entities.shape)
 
@@ -56,14 +55,14 @@ def train(embedding_matrix, entity_num, entity_embedding_dim, rnn_hidden_size, v
 
     labels = [p2, p2_mask]
 
-    final_output_tt, hidden_states_ss, cell_states_ss, entity_hiddens_ss, all_entity_hiddens_ss, ii = decoder(inputs=decoder_inputs_train, keys=entity_keys,
+    final_output_tt = decoder(inputs=decoder_inputs_train, keys=entity_keys,
                                          keys_mask=keys_mask, training=True, labels=labels)
 
 
     with tf.Session() as sess:
         print("inside decode session")
         sess.run(tf.global_variables_initializer())
-        final_output_tt, hidden_states_ss, cell_states_ss, entity_hiddens_ss, all_entity_hiddens_ss, ii = sess.run([final_output_tt, hidden_states_ss, cell_states_ss, entity_hiddens_ss, all_entity_hiddens_ss, ii])
+        final_output_tt = sess.run(final_output_tt)
         print(final_output_tt[0][0])
         print("decode_train worked!")
 
