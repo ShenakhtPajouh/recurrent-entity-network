@@ -877,3 +877,4 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                                     encoder_hidden_states=encoder_hidden_states,
                                     initial_hidden_state=initial_hidden_state, use_shared_keys=use_shared_keys,
                                     return_last=return_last, attention=attention, self_attention=self_attention)
+        a=tf.constant()
