@@ -24,13 +24,16 @@ class Prgrph_ending_classifier(tf.keras.Model):
         tf.sin(tf.divide(p_vec_tiled, tf.pow(tf.cast(200.0, tf.float64), index_vec_tiled))), tf.float32)
         'position_embeddings shape: [max_sent_num, encoding_dim]'
 
-        self.dense=tf.layers.Dense(1)
+        self.dense=None
 
         self.entity_attn_matrix=None
+        self.built=False
 
     def build(self, input_shape):
         self.entity_attn_matrix = K.random_normal_variable(shape=[self.encoding_dim, self.entity_embedding_dim],
                                                            mean=0, scale=0.05, name='entity_attn_matrix')
+        self.dense=tf.layers.Dense(1)
+        self.built=True
 
     def attention_prev_sents(self, query, keys):
         '''
