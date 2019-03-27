@@ -438,7 +438,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.entity_attn_matrix = self.add_weight(name="entity_attn_matrix",
-                                                  shape=[self.entity_embedding_dim, self.entity_embedding_dim],
+                                                  shape=[self.rnn_hidden_size, self.entity_embedding_dim],
                                                   dtype=tf.float32, trainable=True,
                                                   initializer=tf.keras.initializers.TruncatedNormal())
         self.built=True
