@@ -6,23 +6,33 @@ import prgrph_ending_classifier as prgrph_ending_classifier
 K = tf.keras.backend
 
 
-class Sent_encoder(tf.keras.Model):
+class Sent_encoder(tf.keras.layers.Layer):
     def __init__(self, name=None):
         if name is None:
             name = 'sent_encoder'
         super().__init__(name=name)
+        self.positional_mask = None
+        self.built = False
+
+    def build(self, input_shape):
+        input_shapee = input_shape.as_list()
+        self.positional_mask = self.add_weight(shape=[input_shapee[1], input_shapee[2]], name='positional_mask',
+                                               dtype=tf.float32, trainable=True,
+                                               initializer=tf.keras.initializers.TruncatedNormal())
+        self.built = True
 
     def call(self, inputs):
         """
         Description:
-            encode given sentences with bag of words algorithm
+            encode given sentences with weigthed bag of words algorithm
         Args:
             input: sents shape: [current_prgrphs_num,max_sent_len,embedding_dim]
             output: encoded sentences of shape [current_prgrphs_num,encoding_dim] , here encoding_dim is equal to embedding_dim
         """
         ' I assume word embedding for indexes greater that sentnece length is zero vector, so it does not effect sentence encoding '
 
-        return tf.reduce_sum(inputs, 1)
+        to_return = tf.reduce_sum(tf.multiply(inputs, self.positional_mask), axis=1)
+        return to_return
 
 
 class EntityCell(tf.keras.layers.Layer):
@@ -49,9 +59,12 @@ class EntityCell(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         shape = [self.entity_embedding_dim, self.entity_embedding_dim]
-        self.U = self.add_weight(shape=shape, name='U')
-        self.V = self.add_weight(shape=shape, name='V')
-        self.W = self.add_weight(shape=shape, name='W')
+        self.U = self.add_weight(shape=shape, name='U', dtype=tf.float32, trainable=True,
+                                 initializer=tf.keras.initializers.TruncatedNormal())
+        self.V = self.add_weight(shape=shape, name='V', dtype=tf.float32, trainable=True,
+                                 initializer=tf.keras.initializers.TruncatedNormal())
+        self.W = self.add_weight(shape=shape, name='W', dtype=tf.float32, trainable=True,
+                                 initializer=tf.keras.initializers.TruncatedNormal())
         self.built = True
 
     def get_gate(self, encoded_sents, current_hiddens, current_keys):
@@ -268,7 +281,7 @@ def rnn_entity_network_decoder(entity_cell, rnn_cell, softmax_layer, embedding_l
 """
 
 
-class BasicRecurrentEntityEncoder(tf.keras.Model):
+class BasicRecurrentEntityEncoder(tf.keras.layers.Layer):
     def __init__(self, embedding_matrix, max_entity_num=None, entity_embedding_dim=None, entity_cell=None, name=None,
                  **kwargs):
         if name is None:
@@ -362,7 +375,7 @@ class RNNRecurrentEntityEncoder(tf.keras.Model):
         raise NotImplementedError
 
 
-class RNNRecurrentEntitiyDecoder(tf.keras.Model):
+class RNNRecurrentEntitiyDecoder(tf.keras.layers.Layer):
     def __init__(self, embedding_matrix, rnn_hidden_size, entity_cell=None, entity_embedding_dim=None,
                  max_entity_num=None,
                  rnn_cell=None, vocab_size=None, prgrph_ending_Classifier=None, max_sent_num=None,
@@ -421,10 +434,14 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
         self.start_hidden_dense = start_hidden_dense
 
         self.sent_encoder_module = Sent_encoder()
+        self.built = False
 
     def build(self, input_shape):
-        self.entity_attn_matrix = K.random_normal_variable(shape=[self.rnn_hidden_size, self.embedding_dim],
-                                                           mean=0, scale=0.05, name='entity_attn_matrix')
+        self.entity_attn_matrix = self.add_weight(name="entity_attn_matrix",
+                                                  shape=[self.entity_embedding_dim, self.entity_embedding_dim],
+                                                  dtype=tf.float32, trainable=True,
+                                                  initializer=tf.keras.initializers.TruncatedNormal())
+        self.built=True
 
     def attention_hiddens(self, query, keys, memory_mask):
         '''
@@ -453,7 +470,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
         # print('attention logits:',attention_logits)
         # print('tf.where(memory_mask):',tf.where(memory_mask))
         attention_logits = tf.scatter_nd(tf.where(memory_mask), attention_logits, [batch_size, seq_length])
-        attention_logits = tf.where(memory_mask, attention_logits, tf.fill([batch_size, seq_length], -float("Inf")))
+        attention_logits = tf.where(memory_mask, attention_logits, tf.fill([batch_size, seq_length], -20.0))
         attention_coefficients = tf.nn.softmax(attention_logits, axis=1)
         attention = tf.expand_dims(attention_coefficients, -1) * values
 
@@ -489,12 +506,11 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
         # print('attention logits:',attention_logits)
         # print('tf.where(memory_mask):',tf.where(memory_mask))
         attention_logits = tf.scatter_nd(tf.where(keys_mask), attention_logits, [batch_size, seq_length])
-        attention_logits = tf.where(keys_mask, attention_logits, tf.fill([batch_size, seq_length], -float("Inf")))
+        attention_logits = tf.where(keys_mask, attention_logits, tf.fill([batch_size, seq_length], -20.0))
         attention_coefficients = tf.nn.softmax(attention_logits, axis=1)
         attention = tf.expand_dims(attention_coefficients, -1) * values
 
-        return tf.reduce_sum(tf.multiply(tf.expand_dims(tf.matmul(query, self.entity_attn_matrix), axis=1), entities),
-                             axis=1)
+        return tf.reduce_sum(attention, axis=1)
 
     def calculate_hidden(self, curr_sents_prev_hiddens, entities, hiddens_mask, keys_mask):
         """
@@ -1215,7 +1231,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.Model):
                     hidden_statess_ss, hiddens_maskk_ss, cell_statess_ss, ending_hidden_indicess_ss, i_ss]
 
         i = tf.constant(0)
-        generated_prgrphs_sss, generated_prgrphs_embeddings_sss, entity_hiddens_sss, all_entity_hiddens_sss, unfinished_prgrphs_indices_sss, hidden_states_sss,\
+        generated_prgrphs_sss, generated_prgrphs_embeddings_sss, entity_hiddens_sss, all_entity_hiddens_sss, unfinished_prgrphs_indices_sss, hidden_states_sss, \
         hiddens_mask_sss, cell_states_sss, ending_hidden_indices_sss, i_sss = \
             tf.while_loop(
                 outer_cond, outer_body,
