@@ -377,7 +377,7 @@ class RNNRecurrentEntityEncoder(tf.keras.Model):
 
 class RNNRecurrentEntitiyDecoder(tf.keras.layers.Layer):
     def __init__(self, embedding_matrix, rnn_hidden_size, entity_cell=None, entity_embedding_dim=None,
-                 max_entity_num=None,
+                 max_entity_num=None, build_entity_cell=False,
                  rnn_cell=None, vocab_size=None, prgrph_ending_Classifier=None, max_sent_num=None,
                  num_units=None, entity_dense=None, start_hidden_dense=None,
                  softmax_layer=None, name=None, **kwargs):
@@ -390,14 +390,17 @@ class RNNRecurrentEntitiyDecoder(tf.keras.layers.Layer):
         if vocab_size is not None:
             self.vocab_size = vocab_size
 
-        if entity_cell is None:
+
+        if build_entity_cell:
             if entity_embedding_dim is None:
                 raise AttributeError("entity_embedding_dim and entity_cell can't be both None")
             if max_entity_num is None:
                 raise AttributeError("max_entity_num and entity_cell can't be both None")
             entity_cell = EntityCell(max_entity_num=max_entity_num, entity_embedding_dim=entity_embedding_dim,
-                                     name='entity_cell')
-        self.entity_cell = entity_cell
+                                        name='entity_cell')
+            self.entity_cell = entity_cell
+        else:
+            self.entity_cell=entity_cell
 
         if rnn_cell is None:
             # if rnn_hidden_size is None:
@@ -1426,7 +1429,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.layers.Layer):
         # else:
         #     return generated_prgrphs, all_entity_hiddens
 
-    def call(self, inputs, keys, keys_mask, training, initial_hidden_state=None,
+    def call(self, inputs, keys, keys_mask, training, entity_cell=None, initial_hidden_state=None,
              encoder_hidden_states=None, labels=None,
              num_inputs=None,
              update_positions=None, use_shared_keys=False,
@@ -1448,6 +1451,11 @@ class RNNRecurrentEntitiyDecoder(tf.keras.layers.Layer):
 
         :return: generated paragraph in test mode
         """
+        if entity_cell is not None:
+            if self.entity_cell is not None:
+                raise AttributeError("decoder already has an entity cell")
+            else:
+                self.entity_cell=entity_cell
         if training:
             if labels is None:
                 raise AttributeError('labels are None')
