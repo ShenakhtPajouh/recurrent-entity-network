@@ -49,10 +49,10 @@ class Encoder(tf.keras.models.Model):
 
         ret = tf.scatter_nd(shape=[tf.shape(inputs)[0], max_sent_num, self.units], updates=sents, indices=indices)
 
-        return ret
+        return ret, encoded
 
 
-def input_provider(pars, batcher, max_sent_num, use_char_input=True):
+def input_provider(pars, batcher, max_sent_num, use_char_input=True,get_embedding=False):
     """
 
     :param pars: array of paragraphs.
@@ -86,7 +86,10 @@ def input_provider(pars, batcher, max_sent_num, use_char_input=True):
     total_sent_counter = 0
     for i in range(len(pars)):
         par = pars[i]
-        sent = nltk.sent_tokenize(par)
+        if get_embedding:
+            sent=[par]
+        else:
+            sent = nltk.sent_tokenize(par)
         sentence_num.append(len(sent))
         batched = [batcher.batch_sentences([nltk.word_tokenize(s)]) for s in sent]
         start_of_sentence = 0
@@ -167,6 +170,7 @@ if __name__ == '__main__':
     end_c_p = tf.placeholder(shape=[None, 2], dtype=tf.int64)
     encoded = encoder(inp, ss, end_c_p, indices_placeholder, max_sent_num=3)
     print(get_ELMo_initial_state(encoder.ELMo.lm_graph, tf.shape(inp)[0]))
+
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         x_ = sess.run(encoded, feed_dict={inp: inputs, ss: specifier, end_c_p: end_of_sentences,

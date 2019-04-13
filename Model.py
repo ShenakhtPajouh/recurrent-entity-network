@@ -236,12 +236,12 @@ def simple_entity_network(inputs, keys, entity_cell=None,
 
 
 
-# @autograph.convert()
-def rnn_entity_network_encoder(entity_cell, rnn_cell, inputs, keys, mask_inputs=None,
-                               initial_hidden_state=None,
-                               initial_entity_hidden_state=None, update_positions=None, use_shared_keys=False,
-                               return_last=True, self_attention=False):
-    raise NotImplementedError
+def rnn_encoder(inputs):
+    prgrphs, specifier, end_of_sentences, indices, max_sent_num=inputs
+    encoder = elmo_encoder.Encoder(use_character_input=False)
+    encoded_sents, encoded_words = encoder(inputs=prgrphs, sentence_specifier=specifier, end_sentence_specifier=end_of_sentences,
+                            indices=indices, max_sent_num=max_sent_num)
+    return encoded_sents, encoded_words
 
 
 # @autograph.convert()
@@ -389,10 +389,8 @@ class RNNRecurrentEntityEncoder(tf.keras.Model):
         # print(indices)
         # print(sent_mask)
         # print(end_of_sentences)
-
-        encoder = elmo_encoder.Encoder(use_character_input=False)
-        # print(get_ELMo_initial_state(encoder.ELMo.lm_graph,inputs.shape[0]))
-        encoded_sents=encoder(inputs=prgrphs, sentence_specifier=specifier, end_sentence_specifier=end_of_sentences, indices=indices, max_sent_num=max_sent_num)
+        sents_mask=tf.convert_to_tensor(sents_mask)
+        encoded_sents, encoded_words =rnn_encoder([prgrphs, specifier, end_of_sentences, indices, max_sent_num])
         print("encoded_sents shape:" ,encoded_sents.shape)
         return self.entity_cell, simple_entity_network(entity_cell=self.entity_cell, inputs=[encoded_sents, sents_mask],
                                                        keys=keys,
@@ -1197,7 +1195,7 @@ class RNNRecurrentEntitiyDecoder(tf.keras.layers.Layer):
 class RNNRecurrentEntitiyDecoder_sent_gen(tf.keras.layers.Layer):
     def __init__(self, rnn_hidden_size, entity_cell=None, entity_embedding_dim=None,
                  max_entity_num=None, build_entity_cell=False,
-                 rnn_cell=None, vocab_size=None, prgrph_ending_Classifier=None, max_sent_num=None,
+                 rnn_cell=None, vocab_size=None,
                  entity_dense=None, start_hidden_dense=None,
                  softmax_layer=None, name=None, **kwargs):
         if name is None:
@@ -1207,6 +1205,8 @@ class RNNRecurrentEntitiyDecoder_sent_gen(tf.keras.layers.Layer):
         '''' here, rnn_hidden_size must be equal to word embeddings dim for the rnn used for generation'''
         if vocab_size is not None:
             self.vocab_size = vocab_size
+
+        self.entity_embedding_dim=entity_embedding_dim
 
 
         if build_entity_cell:
@@ -1357,9 +1357,6 @@ class RNNRecurrentEntitiyDecoder_sent_gen(tf.keras.layers.Layer):
         attn_entities_output = self.attention_entities(attn_hiddens_output, entities, keys_mask)
         return self.entity_dense(attn_entities_output)
 
-    def get_embeddings(self, input):
-        raise NotImplementedError
-
     def decode_train(self, inputs, labels, keys, keys_mask, encoder_hidden_states=None,
                      initial_hidden_state=None, use_shared_keys=False,
                      return_last=True, attention=False, self_attention=False):
@@ -1392,7 +1389,7 @@ class RNNRecurrentEntitiyDecoder_sent_gen(tf.keras.layers.Layer):
         # print(type(prgrph))
         batch_size = tf.convert_to_tensor(tf.shape(prgrph_embeddings)[0])
         print(type(batch_size))
-        max_sent_num = tf.shape(prgrph_embeddings)[1]
+        max_sent_num = 1
         max_sent_len = tf.shape(prgrph_embeddings)[2]
 
         # prgrph_embeddings = self.get_embeddings(prgrph)
