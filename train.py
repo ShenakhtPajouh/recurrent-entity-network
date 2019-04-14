@@ -73,6 +73,8 @@ def train(entity_num, entity_embedding_dim, rnn_hidden_size, start_token,
                                                             entity_cell=entity_cell,
                                                             entity_embedding_dim=entity_embedding_dim,
                                                             vocab_size=vocab_size)
+
+        start_token = np.zeros(shape=[512], dtype=np.float32)
         if len(first_prgrph_entities.shape) == 3:
             decoder_inputs_train = [False, first_prgrph_entities,vocab_size, start_token]
         else:
@@ -83,9 +85,10 @@ def train(entity_num, entity_embedding_dim, rnn_hidden_size, start_token,
         l_specifier_p = tf.placeholder(shape=[None, None, 2], dtype=tf.int64)
         l_indices_p = tf.placeholder(shape=[None, 2], dtype=tf.int64)
         l_end_of_sentences_p = tf.placeholder(shape=[None, 2], dtype=tf.int64)
-        _, encoded_label = tf.expand_dims(Model.rnn_encoder([l_inputs_p, l_specifier_p, l_end_of_sentences_p, l_indices_p, 1]),axis=1)
+        encoded_label = tf.expand_dims(Model.rnn_encoder([l_inputs_p, l_specifier_p, l_end_of_sentences_p, l_indices_p, 1])[1][:,1:,:512],axis=1)
         labels = [encoded_label, label_mask]
         print(encoded_label.shape, label_mask.shape)
+
 
         final_output_tt = decoder(inputs=decoder_inputs_train, keys=entity_keys_p,
                                   keys_mask=keys_mask, training=True, labels=labels)

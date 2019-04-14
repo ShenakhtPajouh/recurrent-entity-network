@@ -1390,7 +1390,7 @@ class RNNRecurrentEntitiyDecoder_sent_gen(tf.keras.layers.Layer):
         batch_size = tf.convert_to_tensor(tf.shape(prgrph_embeddings)[0])
         print(type(batch_size))
         max_sent_num = 1
-        max_sent_len = tf.shape(prgrph_embeddings)[2]
+        max_sent_len = tf.shape(prgrph_mask)[2]
 
         # prgrph_embeddings = self.get_embeddings(prgrph)
         prgrph_embeddings = tf.convert_to_tensor(prgrph_embeddings)
