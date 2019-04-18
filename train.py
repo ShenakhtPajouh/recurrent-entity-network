@@ -61,6 +61,8 @@ def train(entity_num, entity_embedding_dim, rnn_hidden_size, start_token,
     entity_cell, first_prgrph_entitiess = encoder(
         [inputs_p, specifier_p, indices_p, sents_mask_p, end_of_sentences_p, max_sent_num], entity_keys_p)
 
+    v = encoder.encoder.trainable_variables
+
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         first_prgrph_entities = sess.run(first_prgrph_entitiess,
@@ -69,12 +71,15 @@ def train(entity_num, entity_embedding_dim, rnn_hidden_size, start_token,
 
         print("first_prgrph_entities shape", first_prgrph_entities.shape)
 
+
+        print("rnn variables", v[0].shape, v[1].shape, v[2].shape)
+
         decoder = Model.RNNRecurrentEntitiyDecoder_sent_gen(rnn_hidden_size=rnn_hidden_size,
                                                             entity_cell=entity_cell,
                                                             entity_embedding_dim=entity_embedding_dim,
                                                             vocab_size=vocab_size)
 
-        start_token = np.zeros(shape=[512], dtype=np.float32)
+        start_token = np.zeros(shape=[32], dtype=np.float32)
         if len(first_prgrph_entities.shape) == 3:
             decoder_inputs_train = [False, first_prgrph_entities,vocab_size, start_token]
         else:
@@ -85,7 +90,7 @@ def train(entity_num, entity_embedding_dim, rnn_hidden_size, start_token,
         l_specifier_p = tf.placeholder(shape=[None, None, 2], dtype=tf.int64)
         l_indices_p = tf.placeholder(shape=[None, 2], dtype=tf.int64)
         l_end_of_sentences_p = tf.placeholder(shape=[None, 2], dtype=tf.int64)
-        encoded_label = tf.expand_dims(Model.rnn_encoder([l_inputs_p, l_specifier_p, l_end_of_sentences_p, l_indices_p, 1])[1][:,1:,:512],axis=1)
+        encoded_label = tf.expand_dims(Model.rnn_encoder([l_inputs_p, l_specifier_p, l_end_of_sentences_p, l_indices_p, 1], encoder.encoder)[1][:,1:,:],axis=1)
         labels = [encoded_label, label_mask]
         print(encoded_label.shape, label_mask.shape)
 

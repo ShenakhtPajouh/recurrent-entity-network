@@ -236,9 +236,8 @@ def simple_entity_network(inputs, keys, entity_cell=None,
 
 
 
-def rnn_encoder(inputs):
+def rnn_encoder(inputs, encoder):
     prgrphs, specifier, end_of_sentences, indices, max_sent_num=inputs
-    encoder = elmo_encoder.Encoder(use_character_input=False)
     encoded_sents, encoded_words = encoder(inputs=prgrphs, sentence_specifier=specifier, end_sentence_specifier=end_of_sentences,
                             indices=indices, max_sent_num=max_sent_num)
     return encoded_sents, encoded_words
@@ -374,6 +373,7 @@ class RNNRecurrentEntityEncoder(tf.keras.Model):
             entity_cell = EntityCell(max_entity_num=max_entity_num, entity_embedding_dim=entity_embedding_dim,
                                      name='entity_cell')
         self.entity_cell = entity_cell
+        self.encoder = elmo_encoder.Encoder(use_character_input=False)
 
     def call(self, inputs, keys, num_inputs=None, num_keys=None,
              initial_hidden_state=None,
@@ -390,7 +390,7 @@ class RNNRecurrentEntityEncoder(tf.keras.Model):
         # print(sent_mask)
         # print(end_of_sentences)
         sents_mask=tf.convert_to_tensor(sents_mask)
-        encoded_sents, encoded_words =rnn_encoder([prgrphs, specifier, end_of_sentences, indices, max_sent_num])
+        encoded_sents, encoded_words =rnn_encoder([prgrphs, specifier, end_of_sentences, indices, max_sent_num],self.encoder)
         print("encoded_sents shape:" ,encoded_sents.shape)
         return self.entity_cell, simple_entity_network(entity_cell=self.entity_cell, inputs=[encoded_sents, sents_mask],
                                                        keys=keys,

@@ -9,7 +9,7 @@ from elmo.encoder_cell import encoder_cell, get_ELMo_initial_state
 
 
 class Encoder(tf.keras.models.Model):
-    def __init__(self, use_character_input=True, max_batch_size=128, max_token_length=50, units=512, *args, **kwargs):
+    def __init__(self, use_character_input=True, max_batch_size=256, max_token_length=50, units=512, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.use_char = use_character_input
         self.max_token_length = max_token_length
@@ -25,6 +25,11 @@ class Encoder(tf.keras.models.Model):
                                                        max_batch_size=max_batch_size)
         self.cell = tf.keras.layers.GRUCell(units=units)
         self.rnn = tf.keras.layers.RNN(cell=self.cell, return_sequences=True)
+
+
+    @property
+    def trainable_variables(self):
+        return self.rnn.trainable_variables
 
     def call(self, inputs, sentence_specifier, end_sentence_specifier, indices, max_sent_num=20, training=None,
              mask=None):
@@ -44,6 +49,7 @@ class Encoder(tf.keras.models.Model):
         # i = tf.constant(1, dtype=tf.int64)
         pars = tf.gather_nd(encoded, sentence_specifier)
         embeddings = self.rnn(inputs=pars)
+
 
         sents = tf.gather_nd(embeddings, end_sentence_specifier)
 
@@ -90,6 +96,7 @@ def input_provider(pars, batcher, max_sent_num, use_char_input=True,get_embeddin
             sent=[par]
         else:
             sent = nltk.sent_tokenize(par)
+            print(len(sent))
         sentence_num.append(len(sent))
         batched = [batcher.batch_sentences([nltk.word_tokenize(s)]) for s in sent]
         start_of_sentence = 0
@@ -177,3 +184,6 @@ if __name__ == '__main__':
                                           indices_placeholder: indices})
         print(x_)
         print(x_.shape)
+
+
+
